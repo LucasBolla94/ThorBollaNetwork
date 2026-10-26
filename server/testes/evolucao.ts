@@ -44,6 +44,31 @@ import {
 import { embedDisponivel } from '../src/embed.ts';
 import { hasKey } from '../src/llm.ts';
 
+/**
+ * Traz a configuracao do banco de verdade para o de teste.
+ *
+ * As partes pagas precisam da chave da IA, que mora em settings. Copiar por
+ * dentro do SQLite evita o caminho obvio e ruim: passar a chave na linha de
+ * comando, onde ela aparece no ps e no historico do shell.
+ */
+function herdarConfiguracao(): void {
+  const origem = process.env.THOR_DB_ORIGEM;
+  if (!origem) return;
+  try {
+    db.exec(`ATTACH DATABASE '${origem.replace(/'/g, "''")}' AS prod`);
+    db.exec(
+      `INSERT OR REPLACE INTO settings (key, value, updated_at)
+         SELECT key, value, updated_at FROM prod.settings
+          WHERE key IN ('provider','openrouter_key','anthropic_key','model','modelo_auxiliar')`,
+    );
+    db.exec('DETACH DATABASE prod');
+  } catch (e: any) {
+    console.log(`  (nao consegui herdar a configuracao: ${e?.message})`);
+  }
+}
+
+herdarConfiguracao();
+
 let falhas = 0;
 let passou = 0;
 const ok = (nome: string, certo: boolean, detalhe = '') => {

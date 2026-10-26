@@ -1,7 +1,7 @@
 # Lucky — Plano de Projeto
 
 > Documento vivo. Atualizado conforme as decisões vão sendo tomadas.
-> Última atualização: 2026-10-24
+> Última atualização: 2026-10-26
 
 ---
 
@@ -3008,3 +3008,99 @@ unidades especificas. **Decisao separada, nao tomada aqui.**
 | D111 | Escrever e permitido so em `/opt/luk/data` e `/tmp` — a mesma fronteira que o systemd ja impoe |
 | D112 | Nome de programa e conferido em posicao de programa, nao na linha inteira |
 | D113 | Reiniciar servico fica de fora ate existir regra de sudoers — aprovar o impossivel e encenacao |
+
+---
+
+## 36. O nome, o app e o repositorio
+
+### 36.1 Ele se chama Thor
+
+O agente foi Lucky, depois Luk, depois Jarvis, agora **Thor**. O que muda com o
+nome e so o que aparece: interface, e-mails, a alma, os documentos.
+
+**A infraestrutura continua `luk`** — `/opt/luk`, `luk.db`, a unit do systemd,
+o usuario do sistema, o cookie de sessao. Renomear isso num servidor no ar
+significa migrar caminho, permissao, unit e banco ao mesmo tempo, com risco
+real de deixar o site fora do ar, em troca de nada que o Lucas veja. O nome que
+importa e o que ele le.
+
+### 36.2 A migracao da alma, e o erro de versiona-la por numero
+
+A alma (o texto que define quem o agente e) mora no banco, e era semeada com
+`if (!getSetting('soul'))`. Semear uma vez **nao e migrar**: o texto ficou
+parado na versao anterior a ferramenta de comandos. O agente recebia a
+ferramenta na chamada da API e **nao tinha no texto regra nenhuma sobre ela** —
+nem o que podia, nem que existe autorizacao.
+
+A primeira correcao foi marcar `soul_versao = 3`. Ela durou um deploy: quando o
+nome mudou para Thor, a migracao pulou achando que ja tinha rodado, e a alma
+continuou dizendo "Voce e o Jarvis".
+
+**O numero respondia a pergunta errada.** A pergunta nao e "qual versao e
+esta?", e sim **"este texto e nosso ou foi o Lucas que escreveu?"**. Guardar a
+marca (hash) do texto que nos mesmos gravamos responde direto: se a alma
+guardada bate com a nossa ultima semente, ninguem editou e da para atualizar;
+se nao bate, e dele e nao se toca. A anterior fica sempre em `soul_anterior`.
+
+### 36.3 O app de iPhone
+
+`app/mobile`, Expo SDK 58. Duas telas: entrar e conversar. Sem biblioteca de
+navegacao — para duas telas seria peso sem troco.
+
+**A sessao e a mesma do site, por outro transporte.** Ela sempre foi um token
+aleatorio guardado so como hash no banco; o cookie era apenas o veiculo. Entao
+atender o app nao exigiu um segundo sistema de login:
+
+| | site | app |
+|---|---|---|
+| onde fica | cookie `httpOnly` | Keychain do iPhone |
+| como viaja | cookie automatico | `Authorization: Bearer` |
+| quem le | ninguem, nem o JS da pagina | o app |
+
+O token so volta no corpo da resposta quando o cliente manda `app: true`. No
+site ele nunca passa por JavaScript.
+
+### 36.4 O tiquete do websocket
+
+WebSocket no iOS nao deixa pendurar cabecalho de forma confiavel, e a saida
+obvia — token na URL — e ruim: **a URL vai inteira para o log do Caddy**, e um
+token que vale meses ficaria escrito em texto puro no disco do servidor.
+
+Entao o app troca a sessao por um **tiquete de 30 segundos, de uso unico**
+(`GET /api/ws-ticket`) e conecta com ele. Se vazar no log, ja nao serve.
+
+Verificado: Bearer entra, Bearer invalido nao, websocket sem credencial nao
+abre, tiquete nao funciona duas vezes, sessao de teste removida no fim.
+
+### 36.5 O cartao de aprovacao no celular
+
+E aqui que o canal da §35 fica util de verdade: autorizar de onde voce estiver.
+A hierarquia e a mesma — comando cru grande em cima, frase do Thor pequena e
+rotulada embaixo — e no celular ela importa **mais**, nao menos: tela pequena,
+pessoa na rua, e a tentacao de so bater o olho no texto amigavel e maior.
+
+### 36.6 O repositorio
+
+`https://github.com/LucasBolla94/ThorBollaNetwork.git`, **publico**.
+
+Fora do versionamento de proposito:
+
+- `amostras-voz/` e os audios em `voz/` — **nao e tamanho, e risco**. Com poucos
+  segundos de audio limpo da voz de alguem da para clonar essa voz; num
+  repositorio publico seria material pronto para golpe por telefone.
+- `reference/` — repositorios de terceiros guardados para consulta (389 MB).
+- `node_modules/` e todo arquivo de segredo.
+
+`.gitattributes` forca LF em `.sh`, `.service`, `.py` e no `Caddyfile`: escrito
+no Windows, executado no Linux, e script com CRLF falha no servidor com
+"bad interpreter" — erro que aponta para o interpretador quando o problema e um
+caractere invisivel no fim da primeira linha.
+
+| # | Decisao |
+|---|---|
+| D114 | O agente se chama **Thor**; a infraestrutura continua `luk`, porque renomear servidor no ar e risco sem ganho |
+| D115 | A alma e migrada por **marca do texto**, nao por numero de versao: a pergunta e "este texto e nosso ou dele?" |
+| D116 | Alma anterior sempre guardada em `soul_anterior` antes de qualquer troca |
+| D117 | O app usa a mesma sessao do site: `Bearer` + Keychain; o token so sai no corpo quando o cliente pede |
+| D118 | Websocket do app abre com **tiquete de uso unico de 30s**, nunca com o token, porque URL vai para o log |
+| D119 | Gravacoes de voz ficam fora do git: audio limpo da voz de alguem e material de clonagem |

@@ -687,3 +687,60 @@ sudoers pra unidades específicas, e isso é decisão sua.
 
 **Para experimentar de verdade falta a chave da IA** (menu → Configuração). Sem ela o Thor
 não pensa, então o cartão não tem como nascer de uma conversa.
+
+---
+
+## Sessão 31 — ele virou Thor, e ganhou app de iPhone
+
+**O pedido:** app em Expo focado no iOS, e o nome muda para **Thor**.
+
+### O nome
+
+Troquei no que você vê: site, e-mails, a alma dele, os documentos. **Os
+caminhos do servidor continuam `luk`** (`/opt/luk`, o banco, o serviço). Mudar
+isso num servidor no ar é migrar caminho, permissão e banco ao mesmo tempo, com
+risco de derrubar o site, e você não veria diferença nenhuma.
+
+### Um problema que eu só achei trocando o nome
+
+A alma dele — o texto que diz quem ele é — mora no banco e só era gravada "se
+estivesse vazia". **Ela estava parada numa versão anterior à ferramenta de
+comandos.** Ou seja: o Thor recebia a ferramenta, mas no texto dele não havia
+uma linha sequer sobre o que podia ou não fazer com ela, nem sobre aprovação.
+Estava funcionando pior do que eu achava desde a semana passada.
+
+Corrigi, e a correção também estava errada: marquei "versão 3", e quando o nome
+mudou para Thor a migração pulou achando que já tinha rodado — a alma continuou
+dizendo "Jarvis". **O número respondia a pergunta errada.** A pergunta não é
+"qual versão é esta?", é "este texto é nosso ou foi você que escreveu?".
+
+Agora guardo a marca do texto que nós mesmos gravamos: se bater, ninguém
+editou e posso atualizar; se não bater, é seu e eu não toco. E a versão
+anterior fica sempre guardada antes de qualquer troca.
+
+### O app
+
+`app/mobile`, Expo. Duas telas: entrar e conversar. Com o reator animado, os
+cartões de aprovação e o mesmo visual do painel.
+
+**A sessão é a mesma do site, por outro caminho.** Ela sempre foi um token que
+o servidor guarda só como hash — o cookie era só o transporte. No app o token
+fica no **Keychain do iPhone** e viaja no cabeçalho.
+
+**O websocket não usa esse token.** Usar seria o óbvio, mas a URL do websocket
+vai inteira para o log do servidor, e um token que vale meses ficaria escrito
+em texto puro lá. Então o app pede um **tíquete de 30 segundos, de uso único**,
+e conecta com ele. Se vazar no log, já não serve.
+
+Verifiquei os dois caminhos: entra com credencial certa, barra sem credencial,
+barra credencial inválida, e o tíquete não funciona duas vezes.
+
+### O repositório
+
+Ligado em `LucasBolla94/ThorBollaNetwork`, commit feito aqui. **Não enviei
+ainda, porque o repositório é público.**
+
+Deixei de fora, de propósito: **suas gravações de voz**. Não é por tamanho — com
+poucos segundos de áudio limpo da sua voz dá para cloná-la, e num repositório
+público isso é material pronto para golpe por telefone. Também ficaram fora os
+repositórios de terceiros em `reference/` e qualquer arquivo de segredo.

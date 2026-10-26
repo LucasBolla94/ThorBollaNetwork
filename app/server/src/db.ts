@@ -1,7 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { config } from './config.ts';
 
 mkdirSync(dirname(config.dbPath), { recursive: true });
@@ -266,22 +266,41 @@ Sobre a sua memoria:
  * mesmo assim a anterior fica salva em `soul_anterior`, porque descartar texto
  * que o dono pode ter escrito nao e nossa decisao.
  */
+const marca = (texto: string): string =>
+  createHash('sha256').update(texto).digest('hex').slice(0, 16);
+
 function migrarAlma(): void {
   const atual = getSetting('soul');
-  if (!atual) {
+  const nova = marca(DEFAULT_SOUL);
+
+  const gravar = () => {
     setSetting('soul', DEFAULT_SOUL);
-    setSetting('soul_versao', '3');
+    setSetting('soul_semente', nova);
+  };
+
+  if (!atual) return gravar();
+  if (marca(atual) === nova) {
+    setSetting('soul_semente', nova);
     return;
   }
-  if (getSetting('soul_versao') === '3') return;
-  if (atual.includes('Sobre o servidor')) {
-    // Fala da ferramenta: ou ja esta em dia, ou foi editada. Nao mexo.
-    setSetting('soul_versao', '3');
-    return;
-  }
+
+  // A pergunta certa nao e "qual versao e esta?", e sim "este texto e nosso ou
+  // dele?". Numerar versao nao responde isso: a primeira tentativa marcou
+  // `soul_versao = 3` e, quando o nome do agente mudou, pulou a migracao
+  // achando que ja tinha feito — a alma ficou chamando o agente pelo nome
+  // antigo. Guardar a marca do texto que NOS escrevemos responde direto.
+  const semente = getSetting('soul_semente');
+  const nossa = semente
+    ? semente === marca(atual)
+    : // Antes de existir a marca: ou foi a migracao anterior que escreveu
+      // (deixou `soul_versao`), ou o texto e tao velho que nem fala da
+      // ferramenta de comandos, e entao nao pode ser uma edicao recente dele.
+      getSetting('soul_versao') === '3' || !atual.includes('Sobre o servidor');
+
+  if (!nossa) return; // O Lucas escreveu esta alma. Nao e nossa para trocar.
+
   setSetting('soul_anterior', atual);
-  setSetting('soul', DEFAULT_SOUL);
-  setSetting('soul_versao', '3');
+  gravar();
 }
 
 migrarAlma();

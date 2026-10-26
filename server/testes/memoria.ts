@@ -98,7 +98,7 @@ ok('trata por senhor', /senhor/i.test(doArquivo), 'e a marca do JARVIS');
 ok('manda calcular os dois lados',
   /o que ganha, o que perde/i.test(doArquivo) || /dois caminhos/i.test(doArquivo));
 ok('manda guardar o que ele disse, nao a interpretacao',
-  /nao a sua leitura|nao a conclusao/i.test(doArquivo),
+  /n[aã]o a sua leitura|n[aã]o a conclus[aã]o/i.test(doArquivo),
   'foi assim que eu guardei uma preferencia errada');
 ok('sem sobreposicao', !almaEhSobreposta());
 ok('alma() devolve o arquivo', alma() === doArquivo);

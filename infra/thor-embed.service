@@ -1,0 +1,58 @@
+[Unit]
+Description=Thor — servico de embed (busca por sentido)
+Documentation=https://github.com/LucasBolla94/ThorBollaNetwork
+After=network.target
+# O Thor sobe mesmo sem isto: se o embed cair, a busca por palavra continua e
+# ele so fica mais limitado. Por isso `Wants` e nao `Requires`.
+Before=thor.service
+
+[Service]
+Type=simple
+User=thor
+Group=thor
+WorkingDirectory=/opt/thor/repo/ferramentas/embed
+Environment=THOR_EMBED_PORTA=8799
+Environment=THOR_EMBED_THREADS=2
+# O modelo fica no unico lugar gravavel. Sem isto o fastembed tenta escrever em
+# ~/.cache e falha em silencio sob ProtectHome.
+Environment=HF_HOME=/opt/thor/data/modelos
+Environment=FASTEMBED_CACHE_PATH=/opt/thor/data/modelos
+ExecStart=/opt/thor/data/embed-venv/bin/python servidor.py
+Restart=always
+RestartSec=5
+
+# Carregar o modelo leva uns 15s na primeira vez e baixa ~1 GB. Sem esta folga
+# o systemd mata o processo achando que travou.
+TimeoutStartSec=600
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=thor-embed
+
+# --- Isolamento -----------------------------------------------------------
+# Este processo nao precisa de rede de saida depois de baixar o modelo, nem de
+# escrever fora do cache. Ele le texto da memoria do Lucas, entao vale apertar.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectClock=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+ReadWritePaths=/opt/thor/data/modelos
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+# Teto de memoria: o modelo come ~1,9 GB. 3 GB da folga sem deixar um
+# vazamento comer a maquina inteira.
+MemoryMax=3G
+
+[Install]
+WantedBy=multi-user.target

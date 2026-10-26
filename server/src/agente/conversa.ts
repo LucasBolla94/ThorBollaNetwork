@@ -1,4 +1,6 @@
 import { db, newId, now } from '../db.ts';
+import { alma } from '../alma.ts';
+import { turnosDaConversa } from './compressao.ts';
 import { coreBlock, extractAndStore, recall } from '../memory.ts';
 import { complete, type Prompt, type Tool, type Turn } from '../llm.ts';
 import { executar } from '../executar.ts';
@@ -11,7 +13,6 @@ import { executar } from '../executar.ts';
 // Chat por WebSocket
 // ---------------------------------------------------------------------------
 
-const MEMORY_WINDOW = Number(process.env.LUK_WINDOW ?? 24);
 
 /**
  * A ferramenta que substitui a injecao automatica de memoria.
@@ -33,8 +34,9 @@ export const MEMORY_TOOL: Tool = {
       consulta: {
         type: 'string',
         description:
-          'Palavras-chave do que procurar. Prefira termos concretos (nomes de projeto, ' +
-          'tecnologias, pessoas) a frases inteiras.',
+          'O que procurar. A busca acha por palavra E por sentido, entao vale tanto o ' +
+          'termo exato (nome de projeto, tecnologia, pessoa) quanto a ideia escrita com ' +
+          'outras palavras — "ele nao gosta de texto longo" acha "prefere mensagens curtas".',
       },
     },
     required: ['consulta'],
@@ -87,7 +89,7 @@ export async function runTool(name: string, rawArgs: string): Promise<string> {
   if (name === 'buscar_memoria') {
     const q = String(args.consulta ?? '').trim();
     if (!q) return 'A busca veio vazia. Mande palavras-chave em "consulta".';
-    return recall(q);
+    return await recall(q);
   }
 
   if (name === 'executar') {
@@ -118,28 +120,20 @@ export async function runTool(name: string, rawArgs: string): Promise<string> {
  * Custa uns 10 tokens por requisicao e evita uma invalidacao diaria de tudo.
  */
 export function buildPrompt(conversationId: string): Prompt {
-  const soul = getSetting('soul', DEFAULT_SOUL);
+  const soul = alma();
   const core = coreBlock();
 
-  const history = db
-    .prepare(
-      `SELECT role, content FROM messages
-        WHERE conversation_id = ? AND role IN ('user','assistant')
-        ORDER BY created_at DESC LIMIT ?`,
-    )
-    .all(conversationId, MEMORY_WINDOW) as { role: string; content: string }[];
-
   return {
-    // Estavel entre turnos: e isto que vai levar o marcador de cache em
-    // qualquer um dos dois provedores.
+    // Estavel entre turnos: e isto que leva o marcador de cache. A alma vem de
+    // arquivo e o nucleo e deterministico, entao este texto e o mesmo byte a
+    // byte durante toda a conversa — que e a condicao para o desconto valer.
     systemStable: [soul, core].filter(Boolean).join('\n\n'),
     // Muda todo dia, entao fica depois do marcador: nao cacheia, mas tambem
     // nao invalida o prefixo.
     systemVolatile: `Hoje e ${new Date().toISOString().slice(0, 10)}.`,
-    turns: history.reverse().map((m) => ({
-      role: m.role as 'user' | 'assistant',
-      content: m.content,
-    })),
+    // Cresce em vez de deslizar. Quando passa do orcamento, o meio vira resumo
+    // — ver compressao.ts.
+    turns: turnosDaConversa(conversationId),
   };
 }
 

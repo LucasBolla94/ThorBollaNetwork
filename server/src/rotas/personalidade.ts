@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { config } from '../config.ts';
-import { getSetting, setSetting, DEFAULT_SOUL } from '../db.ts';
+import { getSetting, setSetting } from '../db.ts';
+import { alma, almaDoArquivo, almaEhSobreposta, restaurarAlma, sobreporAlma } from '../alma.ts';
 import { listModels, activeModel, hasKey, apiKey, provider } from '../llm.ts';
 import { requireSession } from '../http/contexto.ts';
 
@@ -13,7 +14,8 @@ export async function rotas(app: FastifyInstance): Promise<void> {
 
   app.get('/api/soul', async (req: any, reply) => {
     if (!requireSession(req, reply)) return;
-    return { soul: getSetting('soul', DEFAULT_SOUL), isDefault: getSetting('soul') === DEFAULT_SOUL };
+    // `isDefault` quer dizer: esta valendo o arquivo do projeto, sem edicao.
+    return { soul: alma(), isDefault: !almaEhSobreposta() };
   });
 
   app.put('/api/soul', async (req: any, reply) => {
@@ -22,14 +24,14 @@ export async function rotas(app: FastifyInstance): Promise<void> {
     if (typeof soul !== 'string' || soul.length > 20_000) {
       return reply.code(400).send({ error: 'texto invalido' });
     }
-    setSetting('soul', soul);
+    sobreporAlma(soul);
     return { ok: true };
   });
 
   app.post('/api/soul/reset', async (req: any, reply) => {
     if (!requireSession(req, reply)) return;
-    setSetting('soul', DEFAULT_SOUL);
-    return { ok: true, soul: DEFAULT_SOUL };
+    restaurarAlma();
+    return { ok: true, soul: almaDoArquivo() };
   });
 
   // ---------------------------------------------------------------------------

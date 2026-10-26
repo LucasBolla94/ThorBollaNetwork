@@ -35,6 +35,25 @@ const DEFAULT_MODEL: Record<Provider, string> = {
   anthropic: 'claude-sonnet-5-5',
 };
 
+/**
+ * O modelo barato, para trabalho que nao precisa do caro.
+ *
+ * Resumo de conversa, titulo e colheita de memoria no fim da sessao sao
+ * tarefas mecanicas: ler um texto e devolver outro, menor. Pagar o modelo
+ * principal por isso e desperdicio — e e trabalho que acontece o tempo todo.
+ *
+ * Uma armadilha documentada pelo Hermes e que vale repetir: o modelo que
+ * resume precisa de janela PELO MENOS do tamanho da do principal. Se for
+ * menor, a chamada falha, o resumo volta vazio, e o meio da conversa e
+ * descartado em silencio. Por isso o padrao e o Haiku, que tem a mesma janela
+ * do Sonnet, e nao um modelo pequeno qualquer.
+ */
+export const modeloAuxiliar = (): string => {
+  const escolhido = getSetting('modelo_auxiliar') || process.env.THOR_MODELO_AUXILIAR || '';
+  if (escolhido) return escolhido;
+  return provider() === 'anthropic' ? 'claude-haiku-5-5' : 'anthropic/claude-haiku-5.5';
+};
+
 export const activeModel = (): string => {
   const p = provider();
   return getSetting(`model_${p}`) || (p === 'openrouter' ? config.model : '') || DEFAULT_MODEL[p];
@@ -434,8 +453,14 @@ export async function* streamChat(
 }
 
 /** Uma chamada curta e sem streaming — usada para dar titulo a conversa. */
-export async function complete(systemText: string, userText: string, maxTokens = 64): Promise<string> {
+export async function complete(
+  systemText: string,
+  userText: string,
+  maxTokens = 64,
+  modelo?: string,
+): Promise<string> {
   const p = provider();
+  const escolhido = modelo || activeModel();
   if (!hasKey(p)) throw new LlmError('Sem chave configurada.');
 
   if (p === 'anthropic') {
@@ -447,7 +472,7 @@ export async function complete(systemText: string, userText: string, maxTokens =
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: activeModel(),
+        model: escolhido,
         max_tokens: maxTokens,
         system: systemText,
         messages: [{ role: 'user', content: userText }],
@@ -467,7 +492,7 @@ export async function complete(systemText: string, userText: string, maxTokens =
       'X-Title': config.siteName,
     },
     body: JSON.stringify({
-      model: activeModel(),
+      model: escolhido,
       max_tokens: maxTokens,
       messages: [
         { role: 'system', content: systemText },

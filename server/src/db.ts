@@ -1,7 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { config } from './config.ts';
 
 mkdirSync(dirname(config.dbPath), { recursive: true });
@@ -219,6 +219,32 @@ function acrescentarColuna(tabela: string, coluna: string, definicao: string): v
 // de ter convidados nao exija migrar conta nenhuma.
 acrescentarColuna('users', 'role', "TEXT NOT NULL DEFAULT 'dono'");
 
+// O vetor do pensamento, para a busca por sentido. Fica NULL ate o servico de
+// embed indexar — que pode ser depois, se ele estiver fora do ar na hora em
+// que o pensamento nasceu. Coluna em vez de tabela porque e um-para-um e
+// sempre lido junto.
+acrescentarColuna('thoughts', 'vetor', 'BLOB');
+acrescentarColuna('thoughts', 'vetor_em', 'INTEGER');
+
+// Ate onde a colheita de memoria ja leu esta conversa. Sem isto ela releria
+// tudo toda vez e guardaria a mesma coisa de novo.
+acrescentarColuna('conversations', 'colhido_ate', 'TEXT');
+
+// Resumo de conversa comprimida. A conversa cresce e, quando enche, o meio
+// vira um resumo — mas o original NUNCA e apagado: fica tudo em `messages`, e
+// isto aqui so substitui o que e ENVIADO ao modelo.
+db.exec(`
+CREATE TABLE IF NOT EXISTS resumos (
+  id              TEXT PRIMARY KEY,
+  conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+  conteudo        TEXT NOT NULL,
+  ate_mensagem    TEXT NOT NULL,
+  mensagens       INTEGER NOT NULL,
+  created_at      INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_resumos_conv ON resumos(conversation_id, created_at DESC);
+`);
+
 export const now = (): number => Date.now();
 export const newId = (): string => randomUUID();
 
@@ -236,87 +262,20 @@ export function setSetting(key: string, value: string): void {
   ).run(key, value, now());
 }
 
-export const DEFAULT_SOUL = `Voce e o Thor, o segundo cerebro do Lucas.
-
-Como voce age:
-- Direto. Sem preambulo, sem "otima pergunta", sem repetir o que ele acabou de dizer.
-- Opiniao em vez de lista de opcoes. Se ele pedir uma escolha, escolha e explique em uma linha.
-- Fala portugues do Brasil, no tom de um colega tecnico experiente.
-- Quando nao sabe, diz que nao sabe. Nunca inventa comando, caminho ou numero.
-
-Sobre o servidor:
-- Voce roda no dedicated-1, um Ubuntu, e tem a ferramenta "executar" para rodar
-  comandos nele. Use quando a pergunta for sobre o estado real da maquina em vez
-  de responder de memoria: servicos, logs, disco, processos, rede.
-- Consultar roda na hora. GRAVAR arquivo dentro de /opt/thor/data ou /tmp tambem
-  funciona, mas para e pede autorizacao: mande junto o campo "motivo", uma frase
-  curta que o Lucas vai ler, e espere a resposta. Negado ou sem resposta, o
-  comando nao roda — nao insista nem procure outro caminho para o mesmo fim.
-- O resto nao passa: apagar fora dali, reiniciar servico, instalar pacote, mandar
-  dados para fora. Se for recusado, a resposta diz o porque — conte ao Lucas o
-  que esta barrado em vez de tentar contornar.
-- Prefira um comando certeiro a varios. Olhe a saida antes de concluir.
-
-Sobre a sua memoria:
-- Voce lembra do que importa entre conversas. Para guardar algo durave, escreva
-  <lembrar tipo="fato">o que aprendeu</lembrar> em qualquer ponto da resposta.
-  Os tipos uteis sao: fato, preferencia, projeto, pessoa, decisao.
-- Guarde o que vale semanas, nao o que vale minutos. Nao guarde o que ele acabou
-  de pedir para fazer; guarde o que explica como ele trabalha.
-- Se descobrir que algo que voce sabia esta errado, escreva
-  <corrigir id="ID_ANTIGO">a versao certa</corrigir>. O registro velho nao e
-  apagado, so sai de circulacao.`;
-
-/**
- * Mantem a alma em dia sem pisar no que o Lucas escreveu.
- *
- * "Semear se estiver vazio" parecia suficiente e nao era: a alma guardada no
- * banco ficou parada na versao anterior a ferramenta de comandos. O Thor
- * recebia a ferramenta na chamada da API mas **nao tinha no texto nenhuma
- * regra sobre ela** — nem o que podia, nem que existe autorizacao. Semear uma
- * vez nao e migrar.
- *
- * O criterio de troca e um fato verificavel, nao um palpite: se falta a secao
- * "Sobre o servidor", aquele texto e comprovadamente de antes da ferramenta
- * existir, entao nao pode ser uma versao editada que valha a pena guardar. E
- * mesmo assim a anterior fica salva em `soul_anterior`, porque descartar texto
- * que o dono pode ter escrito nao e nossa decisao.
- */
-const marca = (texto: string): string =>
-  createHash('sha256').update(texto).digest('hex').slice(0, 16);
-
-function migrarAlma(): void {
-  const atual = getSetting('soul');
-  const nova = marca(DEFAULT_SOUL);
-
-  const gravar = () => {
-    setSetting('soul', DEFAULT_SOUL);
-    setSetting('soul_semente', nova);
-  };
-
-  if (!atual) return gravar();
-  if (marca(atual) === nova) {
-    setSetting('soul_semente', nova);
-    return;
-  }
-
-  // A pergunta certa nao e "qual versao e esta?", e sim "este texto e nosso ou
-  // dele?". Numerar versao nao responde isso: a primeira tentativa marcou
-  // `soul_versao = 3` e, quando o nome do agente mudou, pulou a migracao
-  // achando que ja tinha feito — a alma ficou chamando o agente pelo nome
-  // antigo. Guardar a marca do texto que NOS escrevemos responde direto.
-  const semente = getSetting('soul_semente');
-  const nossa = semente
-    ? semente === marca(atual)
-    : // Antes de existir a marca: ou foi a migracao anterior que escreveu
-      // (deixou `soul_versao`), ou o texto e tao velho que nem fala da
-      // ferramenta de comandos, e entao nao pode ser uma edicao recente dele.
-      getSetting('soul_versao') === '3' || !atual.includes('Sobre o servidor');
-
-  if (!nossa) return; // O Lucas escreveu esta alma. Nao e nossa para trocar.
-
-  setSetting('soul_anterior', atual);
-  gravar();
-}
-
-migrarAlma();
+// ---------------------------------------------------------------------------
+// A alma saiu daqui.
+//
+// Ela morava numa linha desta tabela, semeada "se estivesse vazia". Isso nao
+// era migrar: o texto ficou parado numa versao anterior a ferramenta de
+// comandos sem ninguem ver, depois ficou com o nome errado do agente, e foi
+// preciso inventar marcacao por hash so para decidir se dava para trocar.
+//
+// Agora mora em `server/personalidade.md`, onde o git ja faz esse trabalho.
+// Ver `alma.ts`. O que sobra no banco e so a sobreposicao, quando o Lucas
+// escreve a propria versao pela tela.
+//
+// A linha antiga (`soul`) e o entulho da tentativa anterior saem na primeira
+// vez que o servidor sobe com esta versao. Nao ha o que preservar: o conteudo
+// dela virou o arquivo.
+// ---------------------------------------------------------------------------
+db.prepare(`DELETE FROM settings WHERE key IN ('soul','soul_versao','soul_semente')`).run();

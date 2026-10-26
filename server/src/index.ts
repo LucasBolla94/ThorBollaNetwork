@@ -1,6 +1,8 @@
 import { config } from './config.ts';
 import { userCount } from './auth.ts';
 import { activeModel, hasKey } from './llm.ts';
+import { embedDisponivel } from './embed.ts';
+import { estatisticasDoIndice, indexarPendentes } from './memory.ts';
 import { criarServidor, rotaDeSobra } from './http/servidor.ts';
 import { rotas as rotasConta } from './rotas/conta.ts';
 import { rotas as rotasConversas } from './rotas/conversas.ts';
@@ -38,3 +40,24 @@ app.log.info(
   `Thor no ar em ${endereco} — LLM ${hasKey() ? `ok (${activeModel()})` : 'SEM CHAVE'}, ` +
     `usuarios: ${userCount()}`,
 );
+
+// A busca por sentido so enxerga o que tem vetor. Pensamento guardado enquanto
+// o servico de embed estava fora do ar fica sem vetor e, sem isto, ficaria
+// invisivel em silencio para sempre. Roda no arranque e nao segura o servidor.
+void (async () => {
+  if (!(await embedDisponivel())) {
+    app.log.warn('embed fora do ar — a busca por sentido fica desligada ate ele voltar');
+    return;
+  }
+  let total = 0;
+  for (;;) {
+    const n = await indexarPendentes();
+    if (n === 0) break;
+    total += n;
+  }
+  const e = estatisticasDoIndice();
+  app.log.info(
+    `memoria: ${e.total} pensamentos, ${e.comVetor} com vetor, ${e.fixados} fixados` +
+      (total ? ` (${total} indexados agora)` : ''),
+  );
+})();

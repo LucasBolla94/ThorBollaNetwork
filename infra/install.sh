@@ -85,6 +85,29 @@ cd "$REPO/server"
 # Gerados a partir do SVG, nunca versionados: uma fonte de verdade em vez de
 # quatro arquivos para manter em sincronia. Ficam no .gitignore, entao nao
 # aparecem como alteracao e nao atrapalham o proximo `git reset --hard`.
+log "servico de embed (busca por sentido)"
+# O ambiente Python fica em data/ e nao no repositorio: o deploy e um
+# `git reset --hard`, e um venv de centenas de MB dentro do codigo seria
+# apagado e reinstalado a cada publicacao.
+VENV=$RAIZ/data/embed-venv
+if [[ ! -x $VENV/bin/python ]] && command -v python3 >/dev/null 2>&1; then
+  python3 -m venv "$VENV" 2>/dev/null || {
+    apt-get install -y -qq python3-venv >/dev/null 2>&1
+    python3 -m venv "$VENV"
+  }
+fi
+if [[ -x $VENV/bin/python ]]; then
+  "$VENV/bin/pip" install -q --upgrade pip >/dev/null 2>&1 || true
+  if "$VENV/bin/pip" install -q fastembed >/dev/null 2>&1; then
+    echo "   fastembed pronto"
+  else
+    echo "   AVISO: fastembed nao instalou; a busca por sentido fica desligada"
+  fi
+  mkdir -p "$RAIZ/data/modelos"
+else
+  echo "   sem python3; a busca por sentido fica desligada"
+fi
+
 log "icones do PWA"
 if command -v rsvg-convert >/dev/null 2>&1; then
   for tamanho in 180 192 512; do
@@ -116,6 +139,16 @@ if [[ -f /etc/systemd/system/luk.service ]] && systemctl is-enabled luk.service 
   log "desligando luk.service"
   systemctl disable --now luk.service >/dev/null 2>&1 || true
   echo "   desligado (a unit continua em /etc/systemd/system, para poder voltar)"
+fi
+
+# O embed sobe antes do Thor para que a indexacao do arranque ja o encontre.
+# Se ele nao subir, o Thor sobe do mesmo jeito: a busca por palavra continua.
+if [[ -x $RAIZ/data/embed-venv/bin/python ]]; then
+  install -m 644 "$REPO/infra/thor-embed.service" /etc/systemd/system/thor-embed.service
+  systemctl daemon-reload
+  systemctl enable thor-embed.service >/dev/null 2>&1
+  systemctl restart thor-embed.service
+  echo "   thor-embed iniciado (a primeira vez baixa ~1 GB de modelo)"
 fi
 
 systemctl enable thor.service >/dev/null 2>&1

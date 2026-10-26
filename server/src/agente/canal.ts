@@ -5,6 +5,8 @@ import { activeModel, hasKey, streamChat, LlmError, type ToolCall, type Usage } 
 import { extractAndStore, stats } from '../memory.ts';
 import { aoMudar, cancelarPendentes, decidir, pendentes } from '../aprovacao.ts';
 import { MEMORY_TOOL, SHELL_TOOL, buildPrompt, improveTitle, runTool, saveMessage } from './conversa.ts';
+import { colher } from './colheita.ts';
+import { talvezComprimir } from './compressao.ts';
 
 // O chat por WebSocket: recebe a mensagem, roda o laco do agente e vai
 // mandando o texto conforme ele sai.
@@ -177,6 +179,21 @@ export async function canal(app: FastifyInstance): Promise<void> {
             stats: stats(),
             usage,
           });
+
+          // Depois de responder, nao antes: o Lucas ja tem o texto na tela e
+          // estes dois sao trabalho de arrumacao. Se falharem, a conversa
+          // seguiu igual — por isso nada aqui derruba o turno.
+          void (async () => {
+            try {
+              const colhidas = await colher(conversationId);
+              if (colhidas.length) send({ t: 'colheita', lembrou: colhidas, stats: stats() });
+
+              const comprimidas = await talvezComprimir(conversationId);
+              if (comprimidas) send({ t: 'comprimido', mensagens: comprimidas });
+            } catch (e: any) {
+              app.log.warn({ e }, 'arrumacao pos-resposta falhou');
+            }
+          })();
         } catch (err: any) {
           if (err?.name === 'AbortError') {
             send({ t: 'aborted' });

@@ -14,6 +14,8 @@ import { createSession, destroySession } from '../src/auth.ts';
 import { coreBlock, estatisticasDoIndice, liveThoughts } from '../src/memory.ts';
 import { hasKey } from '../src/llm.ts';
 import { embedDisponivel } from '../src/embed.ts';
+import { perguntaAtual, precisaEntrevistar } from '../src/agente/entrevista.ts';
+import { temPerfil } from '../src/alma.ts';
 
 const BASE = process.env.THOR_BASE ?? 'http://127.0.0.1:8787';
 
@@ -87,6 +89,25 @@ async function falar(texto: string, conversationId?: string): Promise<Resultado>
       reject(new Error('websocket falhou'));
     };
   });
+}
+
+// Se a instalacao ainda nao foi entrevistada, as perguntas da entrevista
+// vem no lugar da conversa normal — e responde-las aqui seria inventar as
+// respostas do dono e gravar isso como a personalidade dele. Entao confere
+// que a entrevista esta de pe, e para.
+//
+// A entrevista em si e testada em testes/evolucao.ts, com modelo de verdade e
+// banco descartavel.
+if (precisaEntrevistar()) {
+  console.log('=== a instalacao esta esperando a entrevista do dono ===');
+  ok('a primeira pergunta esta pronta', Boolean(perguntaAtual()));
+  console.log(`  primeira pergunta: ${perguntaAtual()}`);
+  ok('ainda nao ha perfil', !temPerfil());
+  console.log('\n  O resto do teste precisa de uma instalacao ja entrevistada.');
+  console.log('  Responda as cinco perguntas no site e rode de novo.');
+  destroySession(token);
+  console.log(`\n${falhas === 0 ? 'TUDO CERTO (ate onde da sem o dono)' : 'PROBLEMAS'}`);
+  process.exit(falhas === 0 ? 0 : 1);
 }
 
 try {

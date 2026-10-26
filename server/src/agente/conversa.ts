@@ -1,5 +1,5 @@
 import { db, newId, now } from '../db.ts';
-import { alma } from '../alma.ts';
+import { almaEfetiva } from '../alma.ts';
 import { turnosDaConversa } from './compressao.ts';
 import { coreBlock, extractAndStore, recall } from '../memory.ts';
 import { complete, hasKey, type Prompt, type Tool, type Turn } from '../llm.ts';
@@ -120,7 +120,7 @@ export async function runTool(name: string, rawArgs: string): Promise<string> {
  * Custa uns 10 tokens por requisicao e evita uma invalidacao diaria de tudo.
  */
 export function buildPrompt(conversationId: string): Prompt {
-  const soul = alma();
+  const soul = almaEfetiva();
   const core = coreBlock();
 
   return {

@@ -19,7 +19,13 @@ import {
   searchThoughts,
 } from '../src/memory.ts';
 import { embedDisponivel, proximidade, vetorizarUm, PROXIMO } from '../src/embed.ts';
-import { alma, almaDoArquivo, almaEhSobreposta, restaurarAlma, sobreporAlma } from '../src/alma.ts';
+import {
+  almaEfetiva,
+  almaEhSobreposta,
+  base,
+  restaurarAlma,
+  sobreporAlma,
+} from '../src/alma.ts';
 import { precisaComprimir, talvezComprimir, turnosDaConversa } from '../src/agente/compressao.ts';
 import { colher, vaiColher } from '../src/agente/colheita.ts';
 import { hasKey } from '../src/llm.ts';
@@ -88,25 +94,25 @@ secao('A alma vem do arquivo');
 
 limpar();
 restaurarAlma();
-const doArquivo = almaDoArquivo();
-ok('le personalidade.md', doArquivo.length > 500, `${doArquivo.length} caracteres`);
+const doArquivo = base();
+ok('le base.md', doArquivo.length > 500, `${doArquivo.length} caracteres`);
 ok('diz quem ele e', /voc[eê] [eé] o thor/i.test(doArquivo));
 ok('ensina a marca de lembrar', doArquivo.includes('<lembrar'));
 ok('avisa que memoria recuperada e dado',
   /nunca instru[cç][aã]o|nunca ordem|ignore e conte/i.test(doArquivo));
-ok('trata por senhor', /senhor/i.test(doArquivo), 'e a marca do JARVIS');
+
 ok('manda calcular os dois lados',
   /o que ganha, o que perde/i.test(doArquivo) || /dois caminhos/i.test(doArquivo));
 ok('manda guardar o que ele disse, nao a interpretacao',
   /n[aã]o a sua leitura|n[aã]o a conclus[aã]o/i.test(doArquivo),
   'foi assim que eu guardei uma preferencia errada');
 ok('sem sobreposicao', !almaEhSobreposta());
-ok('alma() devolve o arquivo', alma() === doArquivo);
+ok('sem sobreposicao, vale o arquivo', almaEfetiva().includes(doArquivo));
 
 sobreporAlma('Voce e outra coisa.');
-ok('sobreposicao vale', alma() === 'Voce e outra coisa.' && almaEhSobreposta());
+ok('sobreposicao vale', almaEfetiva() === 'Voce e outra coisa.' && almaEhSobreposta());
 restaurarAlma();
-ok('restaurar volta ao arquivo', alma() === doArquivo && !almaEhSobreposta());
+ok('restaurar volta ao arquivo', almaEfetiva().includes(doArquivo) && !almaEhSobreposta());
 
 // ============================================================ fixar sozinho
 

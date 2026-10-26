@@ -243,6 +243,13 @@ acrescentarColuna('thoughts', 'ultimo_uso', 'INTEGER');
 // escolha explicita do dono nao e palpite a ser revisado.
 acrescentarColuna('thoughts', 'fixado_por', 'TEXT');
 
+// Quanto esta memoria importa, de 1 a 5, dada por um modelo no momento em que
+// ela nasce. Sem isto, "o disco estava em 21%" e "ele decide rapido e odeia
+// ser perguntado duas vezes" valem o mesmo na hora de recuperar — e nao valem.
+// 3 e o meio: o que entrou antes desta coluna existir fica ali, sem fingir
+// que alguem a avaliou.
+acrescentarColuna('thoughts', 'importancia', 'INTEGER NOT NULL DEFAULT 3');
+
 // O que o Thor decidiu sobre a propria memoria, e por que.
 //
 // Guardado separado das memorias de proposito: aqui fica o RACIOCINIO dele, e

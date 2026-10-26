@@ -61,6 +61,7 @@ export function remember(
   content: string,
   sourceMessageId: string | null,
   confidence = 0.8,
+  importancia = 3,
 ): Thought | null {
   const text = content.trim();
   if (text.length < 3 || text.length > 2000) return null;
@@ -82,9 +83,13 @@ export function remember(
   db.prepare(
     `INSERT INTO thoughts
        (id, kind, content, confidence, source_message_id, created_at, updated_at,
-        pinned, fixado_por)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(id, tipo, text, confidence, sourceMessageId, ts, ts, fixar ? 1 : 0, fixar ? 'thor' : null);
+        pinned, fixado_por, importancia)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    id, tipo, text, confidence, sourceMessageId, ts, ts,
+    fixar ? 1 : 0, fixar ? 'thor' : null,
+    Math.min(5, Math.max(1, Math.round(importancia))),
+  );
 
   // O vetor vem depois, sem segurar a resposta. Se o servico estiver fora do
   // ar o pensamento fica sem vetor e a varredura de pendentes pega mais tarde.
@@ -529,32 +534,67 @@ export function esquecerIndice(): void {
   indice = null;
 }
 
-export type Achado = Thought & { proximidade?: number };
+export type Achado = Thought & { proximidade?: number; nota?: number };
 
+/**
+ * Busca por tres sinais, nao por um.
+ *
+ * So proximidade de sentido responde "isto fala do mesmo assunto?" — e isso
+ * nao basta. Entre duas memorias que falam do mesmo assunto, a que foi usada
+ * ontem e marcada como importante vale mais que a de um ano atras que ninguem
+ * olhou. O desenho e o dos Generative Agents:
+ *
+ *   relevancia   proximidade de sentido com a pergunta de agora
+ *   importancia  quanto erraria se esta memoria faltasse (dada na colheita)
+ *   recencia     decai sozinha com o tempo sem uso
+ *
+ * Cada um vai para a faixa 0..1 e os tres se somam. A relevancia pesa mais
+ * porque e ela que decide se o assunto e o mesmo; os outros dois desempatam.
+ *
+ * O corte por proximidade acontece ANTES da soma, de proposito: importancia
+ * alta nao pode fazer uma memoria sobre outro assunto aparecer na resposta.
+ */
 export async function buscarPorSentido(consulta: string, limite = 10): Promise<Achado[]> {
   const alvo = await vetorizarUm(consulta);
   if (!alvo) return [];
 
-  const notas = carregarIndice()
-    .map((e) => ({ e, nota: proximidade(alvo, e.vetor) }))
-    .filter((x) => x.nota >= calibrarLimiar().limiar)
-    .sort((a, b) => b.nota - a.nota)
-    .slice(0, limite);
-  if (notas.length === 0) return [];
+  const limiar = calibrarLimiar().limiar;
+  const candidatos = carregarIndice()
+    .map((e) => ({ e, perto: proximidade(alvo, e.vetor) }))
+    .filter((x) => x.perto >= limiar);
+  if (candidatos.length === 0) return [];
 
-  const porId = new Map(notas.map((n) => [n.e.id, n.nota]));
-  const marcas = notas.map(() => '?').join(',');
+  const marcas = candidatos.map(() => '?').join(',');
   const linhas = db
     .prepare(
       `SELECT id, kind, content, confidence, created_at AS createdAt,
-              updated_at AS updatedAt, pinned, superseded_by AS supersededBy
+              updated_at AS updatedAt, pinned, superseded_by AS supersededBy,
+              importancia, usos, ultimo_uso AS ultimoUso
          FROM thoughts WHERE id IN (${marcas})`,
     )
-    .all(...notas.map((n) => n.e.id)) as Thought[];
+    .all(...candidatos.map((c) => c.e.id)) as (Thought & {
+    importancia: number;
+    usos: number;
+    ultimoUso: number | null;
+  })[];
+
+  const perto = new Map(candidatos.map((c) => [c.e.id, c.perto]));
+  const agora = Date.now();
 
   return linhas
-    .map((t) => ({ ...t, proximidade: porId.get(t.id) }))
-    .sort((a, b) => (b.proximidade ?? 0) - (a.proximidade ?? 0));
+    .map((t) => {
+      const relevancia = perto.get(t.id) ?? 0;
+      const importancia = ((t.importancia ?? 3) - 1) / 4;
+      const dias = Math.max(0, (agora - (t.ultimoUso ?? t.createdAt)) / 86_400_000);
+      const recencia = Math.exp(-dias / 30);
+      return {
+        ...t,
+        proximidade: relevancia,
+        nota: relevancia * 2 + importancia + recencia,
+      };
+    })
+    .sort((a, b) => (b.nota ?? 0) - (a.nota ?? 0))
+    .slice(0, limite);
 }
 
 export function estatisticasDoIndice() {

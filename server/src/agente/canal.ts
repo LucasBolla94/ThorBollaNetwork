@@ -23,6 +23,13 @@ import {
 } from './conversa.ts';
 import { colher } from './colheita.ts';
 import { talvezComprimir } from './compressao.ts';
+import { refletir, vaiRefletir } from './reflexao.ts';
+import {
+  perguntaAtual,
+  precisaEntrevistar,
+  responder,
+  totalDePerguntas,
+} from './entrevista.ts';
 
 // O chat por WebSocket: recebe a mensagem, roda o laco do agente e vai
 // mandando o texto conforme ele sai.
@@ -85,6 +92,36 @@ export async function canal(app: FastifyInstance): Promise<void> {
         if (!text) return;
         if (text.length > 32_000) {
           return send({ t: 'error', message: 'mensagem longa demais' });
+        }
+
+        // A primeira conversa de uma instalacao nova e a entrevista: o agente
+        // se monta para quem instalou antes de servir. Fica aqui, antes do
+        // laco normal, porque quem conduz e este codigo e nao o modelo — uma
+        // pergunta por vez, na ordem, sem divagar.
+        if (precisaEntrevistar()) {
+          busy = true;
+          try {
+            const passo = await responder(text);
+            send({ t: 'start' });
+            send({ t: 'delta', text: passo.texto });
+            send({
+              t: 'done',
+              id: newId(),
+              conversationId: '',
+              content: passo.texto,
+              remembered: [],
+              stats: stats(),
+              entrevista: passo.tipo === 'pergunta'
+                ? { numero: passo.numero, total: passo.total }
+                : { concluida: true },
+            });
+          } catch (e: any) {
+            app.log.error({ e }, 'entrevista falhou');
+            send({ t: 'error', message: 'Nao consegui guardar sua resposta. Tente de novo.' });
+          } finally {
+            busy = false;
+          }
+          return;
         }
 
         busy = true;
@@ -217,6 +254,17 @@ export async function canal(app: FastifyInstance): Promise<void> {
 
               const comprimidas = await talvezComprimir(conversationId);
               if (comprimidas) send({ t: 'comprimido', mensagens: comprimidas });
+
+              // Por ultimo, e so de vez em quando: ele olha para a propria
+              // memoria e a melhora. Junta o repetido, resolve contradicao, e
+              // transforma varias observacoes num entendimento.
+              if (vaiRefletir()) {
+                const r = await refletir();
+                if (r?.operacoes.length) {
+                  app.log.info(`[reflexao] ${r.operacoes.join('; ')}`);
+                  send({ t: 'refletiu', operacoes: r.operacoes, stats: stats() });
+                }
+              }
             } catch (e: any) {
               app.log.warn({ e }, 'arrumacao pos-resposta falhou');
             }
@@ -238,7 +286,17 @@ export async function canal(app: FastifyInstance): Promise<void> {
         }
       });
 
-      send({ t: 'ready', model: activeModel(), hasLlm: hasKey(), stats: stats() });
+      send({
+        t: 'ready',
+        model: activeModel(),
+        hasLlm: hasKey(),
+        stats: stats(),
+        // Numa instalacao nova a primeira pergunta ja vai junto, para a tela
+        // nao abrir em branco esperando que a pessoa adivinhe o que dizer.
+        entrevista: precisaEntrevistar()
+          ? { pergunta: perguntaAtual(), total: totalDePerguntas }
+          : null,
+      });
     });
   });
 

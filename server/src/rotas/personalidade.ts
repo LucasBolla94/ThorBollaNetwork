@@ -1,7 +1,16 @@
 import type { FastifyInstance } from 'fastify';
 import { config } from '../config.ts';
 import { getSetting, setSetting } from '../db.ts';
-import { alma, almaDoArquivo, almaEhSobreposta, restaurarAlma, sobreporAlma } from '../alma.ts';
+import {
+  alma,
+  almaEfetiva,
+  almaEhSobreposta,
+  perfil,
+  perfilEhDoDono,
+  restaurarAlma,
+  sobreporAlma,
+  temPerfil,
+} from '../alma.ts';
 import { listModels, activeModel, hasKey, apiKey, provider } from '../llm.ts';
 import { requireSession } from '../http/contexto.ts';
 
@@ -15,7 +24,15 @@ export async function rotas(app: FastifyInstance): Promise<void> {
   app.get('/api/soul', async (req: any, reply) => {
     if (!requireSession(req, reply)) return;
     // `isDefault` quer dizer: esta valendo o arquivo do projeto, sem edicao.
-    return { soul: alma(), isDefault: !almaEhSobreposta() };
+    return {
+      soul: almaEfetiva(),
+      isDefault: !almaEhSobreposta(),
+      // O perfil e a parte que e do dono. A tela mostra separado para
+      // ninguem confundir o que e produto com o que e dele.
+      perfil: perfil(),
+      temPerfil: temPerfil(),
+      perfilEditado: perfilEhDoDono(),
+    };
   });
 
   app.put('/api/soul', async (req: any, reply) => {
@@ -31,7 +48,7 @@ export async function rotas(app: FastifyInstance): Promise<void> {
   app.post('/api/soul/reset', async (req: any, reply) => {
     if (!requireSession(req, reply)) return;
     restaurarAlma();
-    return { ok: true, soul: almaDoArquivo() };
+    return { ok: true, soul: alma() };
   });
 
   // ---------------------------------------------------------------------------

@@ -1,43 +1,61 @@
 import { db, now } from '../db.ts';
 import { complete, hasKey, modeloAuxiliar } from '../llm.ts';
-import { remember, indexarPendentes, type Thought } from '../memory.ts';
+import { remember, indexarPendentes, reavaliarNucleo, type Thought } from '../memory.ts';
 
 // ===========================================================================
 // A colheita: o que valeu a pena desta conversa.
 //
-// O Thor ja marca `<lembrar>` no meio da resposta, e isso e bom porque nao
+// O agente ja marca `<lembrar>` no meio da resposta, e isso e bom porque nao
 // custa uma segunda chamada de modelo. Mas e o modelo decidindo no calor da
 // resposta, enquanto esta ocupado com outra coisa — e muito escapa.
 //
 // Entao, de tempos em tempos, um modelo BARATO le o trecho recente e responde
 // uma pergunta so: o que aqui vale lembrar daqui a um mes?
 //
-// O criterio e o mesmo da personalidade, e e o que separa memoria de tarefa:
-// vale se continuar verdade depois que esta conversa acabar.
+// Ele tambem da a IMPORTANCIA de cada memoria, de 1 a 5, no mesmo custo. Sem
+// isso, "o disco estava em 21%" e "ele decide rapido e odeia ser perguntado
+// duas vezes" pesam igual na hora de recuperar — e nao pesam.
 // ===========================================================================
 
 /** De quantas mensagens novas em diante vale a pena colher. */
 const PASSO = Number(process.env.THOR_PASSO_COLHEITA ?? 6);
 
-const MOLDE =
-  'Voce le um trecho de conversa entre o Lucas e o assistente dele, e extrai o que vale ' +
-  'guardar como memoria DURAVEL.\n\n' +
-  'Responda SO com linhas no formato:\n' +
-  'tipo | texto\n\n' +
-  'Tipos possiveis: preferencia, decisao, projeto, pessoa, fato.\n\n' +
-  'O criterio e um so: **continua verdade depois que esta conversa acabar?**\n\n' +
-  'Guarde:\n' +
-  '- como o Lucas gosta de trabalhar (preferencia)\n' +
-  '- o que foi decidido e vale daqui para a frente (decisao)\n' +
-  '- o que existe no mundo dele: projetos, pessoas, sistemas (projeto, pessoa, fato)\n\n' +
-  'NAO guarde:\n' +
-  '- o que ele pediu para fazer agora — isso e tarefa, nao memoria\n' +
-  '- estado passageiro ("o disco esta em 21%")\n' +
-  '- o que o assistente fez nesta conversa\n\n' +
-  'Escreva cada linha curta, em terceira pessoa, completa em si mesma: ela vai ser lida ' +
-  'daqui a meses, sem esta conversa ao lado. "Ele prefere decidir sozinho em vez de ser ' +
-  'consultado a cada passo" serve; "ele prefere isso" nao serve.\n\n' +
-  'Se nada valer a pena, responda apenas: NADA';
+const MOLDE = [
+  'Voce le um trecho de conversa entre uma pessoa e o assistente pessoal dela, e extrai o',
+  'que vale guardar como memoria DURAVEL.',
+  '',
+  'Responda SO com linhas no formato:',
+  'tipo | importancia | texto',
+  '',
+  'Tipos possiveis: preferencia, decisao, projeto, pessoa, fato.',
+  '',
+  'A importancia vai de 1 a 5 e responde: o quanto ERRAR sobre isto atrapalharia?',
+  '  5 = muda como tratar a pessoa para sempre (preferencia forte, decisao do projeto)',
+  '  3 = util saber, mas o mundo nao acaba se escapar',
+  '  1 = quase trivial, guarde so porque foi dito',
+  'Seja avaro com 5. Se tudo e importante, nada e.',
+  '',
+  'O criterio para guardar e um so: continua verdade depois que esta conversa acabar?',
+  '',
+  'Guarde:',
+  '- como ela gosta de trabalhar (preferencia)',
+  '- o que foi decidido e vale daqui para a frente (decisao)',
+  '- o que existe no mundo dela: projetos, pessoas, sistemas (projeto, pessoa, fato)',
+  '',
+  'NAO guarde:',
+  '- o que ela pediu para fazer agora, que e tarefa e nao memoria',
+  '- estado passageiro ("o disco esta em 21%")',
+  '- o que o assistente fez nesta conversa',
+  '',
+  'Guarde o que ela DISSE, nao a sua interpretacao do que ela disse. Conclusao sua',
+  'guardada vira verdade dela em toda conversa seguinte.',
+  '',
+  'Escreva cada linha curta, em terceira pessoa, completa em si mesma: ela vai ser lida',
+  'daqui a meses, sem esta conversa ao lado. "Ele prefere decidir sozinho em vez de ser',
+  'consultado a cada passo" serve; "ele prefere isso" nao serve.',
+  '',
+  'Se nada valer a pena, responda apenas: NADA',
+].join('\n');
 
 type Nova = { id: string; role: string; content: string };
 
@@ -70,6 +88,28 @@ export function vaiColher(conversationId: string): boolean {
 }
 
 /**
+ * Le uma linha da resposta do modelo.
+ *
+ * O formato pedido e `tipo | importancia | texto`, mas o modelo as vezes
+ * devolve sem a importancia. Descartar a memoria por causa disso seria perder
+ * conteudo por causa de formatacao — entao a nota vira 3 e segue.
+ */
+export function lerLinha(
+  linha: string,
+): { tipo: string; importancia: number; texto: string } | null {
+  const partes = linha.split('|');
+  if (partes.length < 2) return null;
+
+  const tipo = partes[0].trim().toLowerCase();
+  const temNota = partes.length >= 3 && /^[1-5]$/.test(partes[1].trim());
+  const importancia = temNota ? Number(partes[1].trim()) : 3;
+  const texto = (temNota ? partes.slice(2) : partes.slice(1)).join('|').trim();
+
+  if (!texto || texto.length < 8) return null;
+  return { tipo, importancia, texto };
+}
+
+/**
  * Colhe. Devolve o que foi guardado.
  *
  * Falha calada: se o modelo auxiliar nao responder, a marca de ate onde leu
@@ -82,7 +122,7 @@ export async function colher(conversationId: string): Promise<Thought[]> {
   if (novas.length < PASSO) return [];
 
   const corpo = novas
-    .map((m) => `${m.role === 'user' ? 'Lucas' : 'Thor'}: ${m.content}`)
+    .map((m) => `${m.role === 'user' ? 'Dono' : 'Assistente'}: ${m.content}`)
     .join('\n\n')
     .slice(0, 60_000);
 
@@ -96,10 +136,9 @@ export async function colher(conversationId: string): Promise<Thought[]> {
   const guardados: Thought[] = [];
   if (bruto && !/^\s*NADA\s*$/i.test(bruto)) {
     for (const linha of bruto.split('\n')) {
-      const [tipo, ...resto] = linha.split('|');
-      const texto = resto.join('|').trim();
-      if (!texto || texto.length < 8) continue;
-      const t = remember(tipo.trim().toLowerCase(), texto, null, 0.85);
+      const lida = lerLinha(linha);
+      if (!lida) continue;
+      const t = remember(lida.tipo, lida.texto, null, 0.85, lida.importancia);
       if (t) guardados.push(t);
     }
   }
@@ -112,6 +151,9 @@ export async function colher(conversationId: string): Promise<Thought[]> {
     conversationId,
   );
 
-  if (guardados.length) void indexarPendentes();
+  if (guardados.length) {
+    void indexarPendentes();
+    reavaliarNucleo();
+  }
   return guardados;
 }

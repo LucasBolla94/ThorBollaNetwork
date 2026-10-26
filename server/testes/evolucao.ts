@@ -171,11 +171,17 @@ const novaUsada = pontuarMemoria({
 ok('uso vence tipo', novaUsada > velhaSemUso,
   `fato usado ${novaUsada.toFixed(2)} > preferencia parada ${velhaSemUso.toFixed(2)}`);
 
-marcarUso([usada.id, usada.id]);
+// Duas chamadas, nao o mesmo id duas vezes na mesma: a consulta casa a linha
+// uma vez so, e contar isso como dois usos seria mentira.
+marcarUso([usada.id]);
+marcarUso([usada.id]);
 const conferir = db.prepare(`SELECT usos FROM thoughts WHERE id = ?`).get(usada.id) as { usos: number };
 ok('o uso e contado', conferir.usos === 2, `${conferir.usos} usos`);
 
-// O que o dono fixou na mao e intocavel.
+// O que o dono fixou na mao e intocavel. Sao DUAS viradas porque o tipo
+// preferencia ja nasce fixado pelo agente: a primeira solta, a segunda fixa
+// de novo — agora em nome do dono.
+togglePin(parada.id);
 togglePin(parada.id);
 const dono = db.prepare(`SELECT fixado_por AS p FROM thoughts WHERE id = ?`).get(parada.id) as { p: string };
 ok('fixar na mao marca o dono', dono.p === 'lucas');
@@ -249,7 +255,6 @@ ok('ARQUIVAR nao apaga nem supera', arquivada.s === null, 'continua no acervo, b
 // Protecao: o que o dono fixou nao sai nem por reflexao.
 limpar();
 const doDono = remember('preferencia', 'ele quer isso sempre a mao', null, 0.9, 5)!;
-togglePin(doDono.id);
 togglePin(doDono.id);
 togglePin(doDono.id);
 aplicar({ tipo: 'ARQUIVAR', alvos: [doDono.id], texto: 'acho que nao serve', importancia: 3 });

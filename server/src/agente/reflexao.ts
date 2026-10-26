@@ -2,6 +2,7 @@ import { db, getSetting, newId, now, setSetting } from '../db.ts';
 import { complete, hasKey, modeloAuxiliar } from '../llm.ts';
 import { deBytes, proximidade } from '../embed.ts';
 import {
+  calibrarLimiar,
   correct,
   esquecerIndice,
   indexarPendentes,
@@ -52,8 +53,18 @@ const PASSO = Number(process.env.THOR_PASSO_REFLEXAO ?? 12);
 /** Quantos pares parecidos mostrar. Mais que isso vira ruido no prompt. */
 const PARES = 12;
 
-/** Acima disto, duas memorias sao candidatas a dizer a mesma coisa. */
-const MUITO_PERTO = 0.55;
+/**
+ * Acima de quanto duas memorias sao candidatas a dizer a mesma coisa.
+ *
+ * Isto ja foi 0,55 fixo, e era um chute que nao achava nada: medido neste
+ * servidor, duas frases que dizem o mesmo com outras palavras ficam perto de
+ * 0,40 — abaixo da barra. A reflexao rodava e nunca via par nenhum.
+ *
+ * Agora sai do limiar calibrado pelo proprio acervo, mais uma margem. "Mesma
+ * coisa" tem de ser claramente mais perto que "mesmo assunto", e o quanto isso
+ * vale em numero depende do que esta guardado — nao de um palpite meu.
+ */
+const margemDeRepeticao = (): number => calibrarLimiar().limiar + 0.08;
 
 /** Sem uso por tantos dias, uma memoria vira candidata a sair do nucleo. */
 const DIAS_PARADA = 60;
@@ -102,11 +113,12 @@ export function levantarEvidencia(): Evidencia {
   const todas = vivas();
   const comVetor = todas.filter((t) => t.vetor);
 
+  const limite = margemDeRepeticao();
   const pares: { a: Viva; b: Viva; perto: number }[] = [];
   for (let i = 0; i < comVetor.length; i++) {
     for (let j = i + 1; j < comVetor.length; j++) {
       const perto = proximidade(deBytes(comVetor[i].vetor!), deBytes(comVetor[j].vetor!));
-      if (perto >= MUITO_PERTO) pares.push({ a: comVetor[i], b: comVetor[j], perto });
+      if (perto >= limite) pares.push({ a: comVetor[i], b: comVetor[j], perto });
     }
   }
   pares.sort((x, y) => y.perto - x.perto);

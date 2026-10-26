@@ -10,6 +10,13 @@ export type Thought = {
   updatedAt: number;
   pinned: number;
   supersededBy: string | null;
+  // Os tres que o agente usa para se reordenar sozinho. Ficaram de fora das
+  // consultas por um tempo, e o efeito foi silencioso: quem lia um Thought
+  // via a importancia como indefinida e tratava tudo como igual.
+  importancia: number;
+  usos: number;
+  ultimoUso: number | null;
+  fixadoPor: string | null;
 };
 
 export const KINDS = ['fato', 'preferencia', 'projeto', 'pessoa', 'decisao'] as const;
@@ -24,7 +31,8 @@ export function liveThoughts(limit = 200): Thought[] {
   return db
     .prepare(
       `SELECT id, kind, content, confidence, created_at AS createdAt,
-              updated_at AS updatedAt, pinned, superseded_by AS supersededBy
+              updated_at AS updatedAt, pinned, superseded_by AS supersededBy,
+              importancia, usos, ultimo_uso AS ultimoUso, fixado_por AS fixadoPor
          FROM thoughts
         WHERE superseded_by IS NULL
         ORDER BY pinned DESC, created_at DESC
@@ -37,7 +45,8 @@ export function allThoughts(limit = 500): Thought[] {
   return db
     .prepare(
       `SELECT id, kind, content, confidence, created_at AS createdAt,
-              updated_at AS updatedAt, pinned, superseded_by AS supersededBy
+              updated_at AS updatedAt, pinned, superseded_by AS supersededBy,
+              importancia, usos, ultimo_uso AS ultimoUso, fixado_por AS fixadoPor
          FROM thoughts ORDER BY created_at DESC LIMIT ?`,
     )
     .all(limit) as Thought[];
@@ -98,7 +107,8 @@ export function remember(
   return db
     .prepare(
       `SELECT id, kind, content, confidence, created_at AS createdAt,
-              updated_at AS updatedAt, pinned, superseded_by AS supersededBy
+              updated_at AS updatedAt, pinned, superseded_by AS supersededBy,
+              importancia, usos, ultimo_uso AS ultimoUso, fixado_por AS fixadoPor
          FROM thoughts WHERE id = ?`,
     )
     .get(id) as Thought;
@@ -180,7 +190,8 @@ export function searchThoughts(q: string, limit = 20): Thought[] {
     return db
       .prepare(
         `SELECT t.id, t.kind, t.content, t.confidence, t.created_at AS createdAt,
-                t.updated_at AS updatedAt, t.pinned, t.superseded_by AS supersededBy
+                t.updated_at AS updatedAt, t.pinned, t.superseded_by AS supersededBy,
+                t.importancia, t.usos, t.ultimo_uso AS ultimoUso, t.fixado_por AS fixadoPor
            FROM thoughts_fts f JOIN thoughts t ON t.rowid = f.rowid
           WHERE f.content MATCH ? AND t.superseded_by IS NULL
           ORDER BY rank LIMIT ?`,
@@ -569,7 +580,8 @@ export async function buscarPorSentido(consulta: string, limite = 10): Promise<A
     .prepare(
       `SELECT id, kind, content, confidence, created_at AS createdAt,
               updated_at AS updatedAt, pinned, superseded_by AS supersededBy,
-              importancia, usos, ultimo_uso AS ultimoUso
+              importancia, usos, ultimo_uso AS ultimoUso, fixado_por AS fixadoPor,
+              importancia, usos, ultimo_uso AS ultimoUso, fixado_por AS fixadoPor
          FROM thoughts WHERE id IN (${marcas})`,
     )
     .all(...candidatos.map((c) => c.e.id)) as (Thought & {

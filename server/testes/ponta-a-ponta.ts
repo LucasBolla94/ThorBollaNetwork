@@ -125,7 +125,26 @@ try {
     'a memoria atravessou a conversa',
   );
 
-  console.log('\n=== conversa 3: achar pelo sentido ===');
+  console.log('\n=== conversa 3: ele calcula os dois lados? ===');
+  const d = await falar(
+    'Preciso decidir se guardo os backups do Thor no proprio servidor ou num ' +
+      'lugar de fora. O que voce acha?',
+  );
+  console.log(`  ele disse: ${d.texto.slice(0, 320).replace(/\n/g, ' ')}...`);
+  ok('trata por senhor', /senhor/i.test(d.texto));
+  ok(
+    'apresenta mais de um caminho',
+    (d.texto.match(/\b(op[cç][aã]o|caminho|alternativa)\b/gi) ?? []).length >= 2 ||
+      /\*\*(A|B|1|2)[\).:]/.test(d.texto),
+    'o JARVIS nao decide sozinho',
+  );
+  ok('fala do risco de cada lado', /risco|perde|problema|contra|desvantagem/i.test(d.texto));
+  ok(
+    'termina com uma recomendacao',
+    /eu iria|recomendo|eu ficaria|minha escolha|eu escolheria|ficaria com/i.test(d.texto),
+  );
+
+  console.log('\n=== conversa 4: achar pelo sentido ===');
   const c = await falar(
     'Procura na sua memoria: tem alguma coisa sobre eu nao gostar de listas grandes?',
   );

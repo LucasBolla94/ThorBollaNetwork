@@ -3284,3 +3284,109 @@ prova real so acontece com o telefone na mao**.
 | D127 | O corpo do aviso leva o comando cru, nunca a justificativa do modelo |
 | D128 | O disparo escuta `aoMudar` de fora; `aprovacao.ts` nao sabe que push existe |
 | D129 | Token recusado com `DeviceNotRegistered` e apagado na hora |
+
+---
+
+## 39. O projeto organizado, e o deploy pelo GitHub
+
+### 39.1 A estrutura
+
+```
+README.md          a porta de entrada
+server/            o agente
+web/               o site
+mobile/            o app
+infra/             o que poe no ar
+voz/               ferramentas da voz
+docs/              plano, diario e operacao
+```
+
+`app/` deixou de existir como invólucro: `app/server` dizia duas vezes a mesma
+coisa, e `app/deploy` nunca foi aplicacao.
+
+### 39.2 O deploy deixou de empacotar e passou a buscar
+
+Antes: `tar` da pasta local, `scp`, extrair, instalar. O que rodava no servidor
+era **o que estava na maquina de quem rodou o script** — sem registro de qual
+versao era, e com a possibilidade silenciosa de publicar algo que nunca foi
+commitado.
+
+Agora o servidor busca do GitHub:
+
+```
+/opt/thor/
+├── repo/   git reset --hard a cada deploy
+├── data/   o banco, nunca tocado
+└── .env    os segredos, nunca tocados
+```
+
+Dados e segredos ficam **fora** do repositorio porque o deploy apaga o que nao
+esta versionado. `git reset --hard` e nao `git pull`: servidor e destino de
+deploy, nao lugar de editar — se alguem mexeu la, o certo e perder a mudanca,
+nao travar o deploy num conflito.
+
+E o `deploy.sh` se recusa a publicar com alteracao nao enviada. Se o servidor
+busca do GitHub, o que nao chegou no GitHub nao existe.
+
+### 39.3 Duas coisas que o deploy por git obrigou a arrumar
+
+**A versao do service worker.** O `install.sh` reescrevia `sw.js` para carimbar
+a versao do cache. Com o codigo versionado, um script que edita arquivo
+versionado suja a arvore e trava o `git reset` seguinte. Agora a versao e
+calculada **ao servir**, a partir do resumo de `app.js`, `app.css` e
+`index.html`. Nao ha passo para esquecer nem arquivo para sujar.
+
+**Os PNG do icone.** Gerados do SVG a cada instalacao, agora fora do
+versionamento. Uma fonte de verdade em vez de quatro arquivos para manter em
+sincronia.
+
+### 39.4 Volta automatica
+
+As duas unidades disputam a porta 8787, entao a troca tem um instante em que
+ninguem atende. Se o servico novo nao responder, o `install.sh` **religa o
+anterior** e mostra o log.
+
+Por isso a unit antiga e desligada mas **o arquivo dela fica**: apagar seria
+queimar a ponte no meio da travessia.
+
+### 39.5 O index.ts de mil linhas
+
+Fazia tudo: criava o servidor, declarava trinta rotas, montava o prompt e
+rodava o laco do agente. Funcionava, e era exatamente o tipo de arquivo onde
+uma mudanca pequena exige ler o resto inteiro para ter certeza.
+
+```
+index.ts            39 linhas: o que entra e em que ordem
+http/servidor.ts    instancia, estaticos, CSP, service worker
+http/contexto.ts    quem esta falando — a unica definicao de "autenticado"
+rotas/              conta, conversas, memoria, operacao, personalidade
+agente/conversa.ts  ferramentas, prompt, o que fica guardado
+agente/canal.ts     o WebSocket e o laco
+```
+
+Cada grupo de rota e um plugin do Fastify. A ordem importa num ponto so: a rota
+de sobra vai por ultimo, porque e ela que responde o que ninguem respondeu.
+
+Conferido antes de publicar com o servidor novo rodando numa **porta separada**:
+rota publica 200, privada 401, caminho desconhecido caindo no index, service
+worker saindo com versao. Depois, os 90 casos de aprovacao de novo.
+
+### 39.6 Um erro que a mudanca de caminho criou
+
+`/opt/luk/data` estava **escrito a mao** dentro do `executar.ts` como o unico
+lugar onde gravar era aprovavel. Com a mudanca para `/opt/thor`, a faixa de
+aprovacao passou a apontar para um diretorio que nao existe mais: nada do que
+o Thor pedisse para gravar funcionaria, e o motivo seria dificil de achar.
+
+Agora sai de `config.dataDir`, a mesma fonte que o systemd usa em
+`ReadWritePaths`. **Duas copias de um caminho sao duas chances de divergir.**
+
+| # | Decisao |
+|---|---|
+| D130 | O deploy busca do GitHub; o que esta no ar e um commit, com nome e historico |
+| D131 | `git reset --hard`, nao `pull`: servidor e destino de deploy, nao lugar de editar |
+| D132 | Dados e segredos fora do repositorio, porque o deploy apaga o que nao e versionado |
+| D133 | A versao do service worker e calculada ao servir, nao escrita nem carimbada |
+| D134 | `install.sh` religa a versao anterior sozinho se a nova nao responder |
+| D135 | Cada grupo de rota e um plugin; `index.ts` so monta |
+| D136 | Caminho que o systemd e o codigo precisam saber tem **uma** fonte: `config.dataDir` |

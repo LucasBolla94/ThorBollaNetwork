@@ -240,7 +240,11 @@ export function extractAndStore(raw: string, sourceMessageId: string | null): Ex
   const saved: Thought[] = [];
 
   for (const m of raw.matchAll(RE_CORRECT)) {
-    const t = correct(m[1], 'fato', m[2], sourceMessageId);
+    // Tipo vazio de proposito: `correct` cai no tipo do pensamento antigo.
+    // Passando 'fato' aqui, toda correcao de uma preferencia virava fato — e
+    // fato nao e fixado, entao corrigir uma memoria a derrubava do nucleo em
+    // silencio.
+    const t = correct(m[1], '', m[2], sourceMessageId);
     if (t) saved.push(t);
   }
   for (const m of raw.matchAll(RE_REMEMBER)) {

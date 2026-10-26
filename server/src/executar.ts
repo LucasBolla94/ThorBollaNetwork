@@ -118,7 +118,11 @@ const FUGAS_INTERNAS: [RegExp, string, string][] = [
  */
 const CORRESPONDENCIA_QUEBRADA: [RegExp, string][] = [
   [/\$\(|`/, 'substituicao de comando: o que rodaria so se decide na hora, nao da para aprovar'],
-  [/(^|[^&])&($|[^&])/, 'rodar em segundo plano escapa do tempo limite e da decisao'],
+  // O caractere antes do & importa: em `2>&1` ele vem depois de um `>` e nao
+  // solta processo nenhum — so junta a saida de erro com a normal. Sem esta
+  // excecao, a forma mais comum da shell inteira era recusada como se fosse
+  // segundo plano, e o motivo dado nao fazia sentido nenhum para quem lesse.
+  [/(^|[^&>])&($|[^&])/, 'rodar em segundo plano escapa do tempo limite e da decisao'],
 ];
 
 /**
@@ -236,6 +240,9 @@ export function avaliar(comando: string): Veredito {
   // Redirecionamento escreve arquivo. Aprovavel se o destino for gravavel.
   for (const alvo of alvosDeRedirecionamento(texto)) {
     if (alvo === '&1' || alvo === '&2') continue;
+    // Jogar fora nao e gravar. `2>/dev/null` existe para calar erro esperado,
+    // e e tao comum que recusa-lo faz o Thor parecer quebrado.
+    if (alvo === '/dev/null') continue;
     if (!gravavel(alvo)) {
       return {
         nivel: 'nunca',

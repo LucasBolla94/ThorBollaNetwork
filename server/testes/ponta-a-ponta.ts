@@ -91,22 +91,26 @@ async function falar(texto: string, conversationId?: string): Promise<Resultado>
 
 try {
   console.log('=== conversa 1: contar uma preferencia ===');
+  // Um fato neutro, de proposito. A versao anterior deste teste ensinava ao
+  // Thor "eu odeio receber varias opcoes" — que era justamente a conclusao
+  // errada que eu tinha tirado de uma fala do Lucas. O teste reescrevia a
+  // memoria errada toda vez que rodava.
   const a = await falar(
-    'Uma coisa sobre como eu trabalho: eu odeio receber varias opcoes. ' +
-      'Escolhe uma e me diz qual, sempre. Guarda isso.',
+    'Uma coisa sobre como eu trabalho: eu rendo melhor de madrugada, entre ' +
+      'meia-noite e quatro da manha. Guarda isso.',
   );
   console.log(`  ele disse: ${a.texto.slice(0, 130).replace(/\n/g, ' ')}...`);
   ok('respondeu', a.texto.length > 10);
   ok('a marca nao vazou para a tela', !a.texto.includes('<lembrar'));
 
   const guardadas = liveThoughts(50);
-  const sobreOpcoes = guardadas.filter((t) => /op[cç]|escolh/i.test(t.content));
+  const sobreOpcoes = guardadas.filter((t) => /madrugada|meia-noite|noite/i.test(t.content));
   ok('guardou a preferencia', sobreOpcoes.length > 0,
     sobreOpcoes[0]?.content.slice(0, 70) ?? 'nada');
   ok('fixou sozinho', sobreOpcoes.some((t) => t.pinned === 1));
 
   const nucleo = coreBlock();
-  ok('entrou no nucleo', /op[cç]|escolh/i.test(nucleo));
+  ok('entrou no nucleo', /madrugada|meia-noite|noite/i.test(nucleo));
 
   if (await embedDisponivel()) {
     // Dou tempo da indexacao em segundo plano terminar.
@@ -116,12 +120,12 @@ try {
   }
 
   console.log('\n=== conversa 2 (NOVA): ele lembra? ===');
-  const b = await falar('Quando eu te pedir uma escolha, como voce deve responder?');
+  const b = await falar('Qual e o melhor horario para me mandar uma tarefa pesada?');
   console.log(`  ele disse: ${b.texto.slice(0, 180).replace(/\n/g, ' ')}...`);
   ok('e outra conversa', b.conversationId !== a.conversationId);
   ok(
     'lembrou sem eu repetir',
-    /uma op[cç]|escolh|uma s[oó]|n[aã]o.*(v[aá]rias|lista)/i.test(b.texto),
+    /madrugada|meia-noite|0?0h|04h|quatro da manh/i.test(b.texto),
     'a memoria atravessou a conversa',
   );
 
@@ -146,11 +150,11 @@ try {
 
   console.log('\n=== conversa 4: achar pelo sentido ===');
   const c = await falar(
-    'Procura na sua memoria: tem alguma coisa sobre eu nao gostar de listas grandes?',
+    'Procura na sua memoria: tem alguma coisa sobre o periodo do dia em que eu produzo mais?',
   );
   console.log(`  ele disse: ${c.texto.slice(0, 180).replace(/\n/g, ' ')}...`);
-  ok('achou com outras palavras', /op[cç]|escolh/i.test(c.texto),
-    'palavras diferentes das guardadas');
+  ok('achou com outras palavras', /madrugada|meia-noite|noite/i.test(c.texto),
+    'perguntei com palavras diferentes das guardadas');
 } catch (e: any) {
   console.log(`\nFALHOU: ${e?.message}`);
   falhas++;

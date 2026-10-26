@@ -209,9 +209,9 @@ secao('A conversa cresce em vez de esquecer');
 
 limpar();
 const c1 = conversa('longa');
-const base = now() - 100_000;
+const inicio = now() - 100_000;
 for (let i = 0; i < 40; i++) {
-  msg(c1, i % 2 === 0 ? 'user' : 'assistant', `mensagem numero ${i}`, base + i * 1000);
+  msg(c1, i % 2 === 0 ? 'user' : 'assistant', `mensagem numero ${i}`, inicio + i * 1000);
 }
 
 const turnos = turnosDaConversa(c1);

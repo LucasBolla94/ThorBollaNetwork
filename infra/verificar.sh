@@ -52,7 +52,10 @@ SAIDA=$("$TSC" --noEmit --skipLibCheck --target esnext --module nodenext \
 # TS2307 em `node:*` e so a falta de @types/node, que nao instalamos de
 # proposito: o projeto nao compila, entao tipos de biblioteca sao peso sem uso.
 # O que importa e nome que nao existe, export que nao existe e erro de sintaxe.
-GRAVES=$(echo "$SAIDA" | grep -E 'TS2304|TS2552|TS2305|TS2724|TS1[0-9]{3}' || true)
+# TS2451 entrou depois de um import colidir com uma variavel local do mesmo
+# nome: o arquivo compilava para o compilador e explodia ao carregar. Erro
+# que so aparece em tempo de execucao e o pior tipo de erro que existe.
+GRAVES=$(echo "$SAIDA" | grep -E 'TS2304|TS2552|TS2305|TS2724|TS2451|TS2440|TS1[0-9]{3}' || true)
 
 rm -rf /tmp/thor-check /tmp/thor-src.tgz
 

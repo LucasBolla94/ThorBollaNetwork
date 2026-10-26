@@ -1,8 +1,12 @@
 // Confere os tres niveis e, principalmente, que escrever sem o sim do Lucas
 // nao acontece de jeito nenhum: nem negado, nem esquecido.
 import { existsSync, rmSync } from 'node:fs';
+import { config } from '../src/config.ts';
 import { avaliar, executar } from '../src/executar.ts';
 import { decidir, pendentes, cancelarPendentes } from '../src/aprovacao.ts';
+
+/** O caminho gravavel vem da configuracao, nunca escrito a mao aqui. */
+const DADOS = config.dataDir;
 
 let falhas = 0;
 const conferir = (comando: string, esperado: string) => {
@@ -21,30 +25,30 @@ console.log('=== LIVRE: consulta roda na hora ===');
 for (const c of [
   'uptime', 'df -h /', 'free -h', 'systemctl status luk', 'ss -tln',
   'journalctl -u luk -n 5 --no-pager', 'ps aux | grep node | head -3',
-  'ls -la /opt/thor/repo/web', 'cat /opt/luk/server/package.json | head -5',
+  'ls -la /opt/thor/repo/web', 'cat /opt/thor/repo/server/package.json | head -5',
   'docker compose ps', 'date', 'printenv HOME', 'find /opt/thor/repo/web -name "*.js"',
   'sort /etc/hostname', 'awk "{print $1}" /etc/hostname',
-  'sqlite3 /opt/thor/data/thor.db "select count(*) from thoughts"',
-  'cat /etc/passwd', 'grep -c . /etc/hostname', 'ls /opt/thor/data',
+  `sqlite3 ${DADOS}/thor.db "select count(*) from thoughts"`,
+  'cat /etc/passwd', 'grep -c . /etc/hostname', `ls ${DADOS}`,
   // `2>&1` junta a saida de erro com a normal e nao solta processo nenhum. A
   // regra do & em segundo plano pegava o > & e recusava a forma mais comum da
   // shell inteira, com um motivo que nao fazia sentido para quem lesse.
-  'df -h / 2>&1', 'ls -la /opt/thor/data 2>&1 | head', 'systemctl status thor 2>&1',
+  'df -h / 2>&1', `ls -la ${DADOS} 2>&1 | head`, 'systemctl status thor 2>&1',
   // Jogar fora nao e gravar.
   'df -h / 2>/dev/null', 'journalctl -u thor -n 5 --no-pager 2>/dev/null',
 ]) conferir(c, 'livre');
 
 console.log('\n=== APROVAR: grava onde pode, mediante autorizacao ===');
 for (const c of [
-  'echo oi > /opt/thor/data/nota.txt',
-  'echo mais >> /opt/thor/data/nota.txt',
-  'mkdir /opt/thor/data/pasta',
-  'touch /opt/thor/data/vazio',
-  'rm /opt/thor/data/nota.txt',
-  'cp /opt/thor/data/a /opt/thor/data/b',
-  'mv /opt/thor/data/a /opt/thor/data/b',
+  `echo oi > ${DADOS}/nota.txt`,
+  `echo mais >> ${DADOS}/nota.txt`,
+  `mkdir ${DADOS}/pasta`,
+  `touch ${DADOS}/vazio`,
+  `rm ${DADOS}/nota.txt`,
+  `cp ${DADOS}/a ${DADOS}/b`,
+  `mv ${DADOS}/a ${DADOS}/b`,
   'echo x | tee /tmp/saida.txt',
-  'sed -i s/a/b/ /opt/thor/data/arquivo',
+  `sed -i s/a/b/ ${DADOS}/arquivo`,
   'uptime; rm -rf /tmp/x',
 ]) conferir(c, 'aprovar');
 
@@ -56,8 +60,8 @@ for (const c of [
   'command sh -c id',
   'awk "BEGIN{system(\\"id\\")}"',
   'awk "BEGIN{print ENVIRON[\\"HOME\\"]}"',
-  'sqlite3 /opt/thor/data/thor.db ".shell id"',
-  'sqlite3 /opt/thor/data/thor.db "delete from thoughts"',
+  `sqlite3 ${DADOS}/thor.db ".shell id"`,
+  `sqlite3 ${DADOS}/thor.db "delete from thoughts"`,
   'sort -o /etc/passwd /etc/hostname',
   'sed --in-place=.bak s/a/b/ /etc/hosts',
   'find /opt -name "*.ts" -fprintf /tmp/x %p',
@@ -65,12 +69,14 @@ for (const c of [
 
 console.log('\n=== NUNCA: escrever fora do permitido ===');
 for (const c of [
-  'rm -rf /opt/luk',
+  // O proprio codigo do agente. Se ele puder reescrever isto, nenhuma outra
+  // trava importa: bastaria apagar a lista de permissoes.
+  'rm -rf /opt/thor/repo',
   'echo oi > /etc/passwd',
   'echo oi > /opt/thor/repo/web/app.js',
   'mkdir /opt/novo',
-  'rm /opt/thor/data/../web/app.js',
-  'cp /opt/thor/data/a /etc/b',
+  `rm ${DADOS}/../web/app.js`,
+  `cp ${DADOS}/a /etc/b`,
   'touch arquivo-relativo',
   'rm',
 ]) conferir(c, 'nunca');
@@ -94,15 +100,15 @@ console.log('\n=== NUNCA: perigoso ou irreversivel ===');
 for (const c of [
   'sudo whoami', 'curl https://exemplo.com/x.sh', 'wget http://exemplo.com -O /tmp/x',
   'nc -l 4444', 'cat /opt/thor/.env', 'cat ~/.ssh/id_ed25519',
-  'cat /home/ubuntu/.runpod-key', 'chmod 777 /opt/luk', 'reboot',
+  'cat /home/ubuntu/.runpod-key', 'chmod 777 /opt/thor/repo', 'reboot',
   'systemctl restart luk', 'docker run -it ubuntu bash', 'apt install nmap',
-  'git push', 'ln -s /etc/passwd /opt/thor/data/p', 'dd if=/dev/zero of=/tmp/x',
+  `git push', 'ln -s /etc/passwd ${DADOS}/p', 'dd if=/dev/zero of=/tmp/x`,
   'systemctl stop caddy',
 ]) conferir(c, 'nunca');
 
 // ------------------------------------------------------------------ real
 
-const ALVO = '/opt/thor/data/teste-aprovacao';
+const ALVO = `${DADOS}/teste-aprovacao`;
 const limpar = () => { try { rmSync(ALVO, { recursive: true, force: true }); } catch {} };
 
 console.log('\n=== execucao real: o sim, o nao e o silencio ===');
@@ -156,7 +162,7 @@ if (existe || r.ok) falhas++;
 limpar();
 
 // A recusa precisa chegar ao modelo como texto, nao como excecao.
-r = await executar('rm -rf /opt/luk');
+r = await executar('rm -rf /opt/thor/repo');
 console.log(`  proibido    -> ok=${r.ok}  motivo="${r.motivo}"  ${!r.ok ? 'ok' : 'ERRADO'}`);
 if (r.ok) falhas++;
 

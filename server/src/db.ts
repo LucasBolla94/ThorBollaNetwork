@@ -230,6 +230,35 @@ acrescentarColuna('thoughts', 'vetor_em', 'INTEGER');
 // tudo toda vez e guardaria a mesma coisa de novo.
 acrescentarColuna('conversations', 'colhido_ate', 'TEXT');
 
+// Quantas vezes esta memoria ja foi util de verdade, e quando pela ultima vez.
+//
+// E a unica evidencia que existe sobre o que importa. Sem ela, "o que o Thor
+// sabe de cor" seria para sempre o que EU decidi que deveria ser — uma lista
+// de tipos escrita a mao. Com ela, o proprio uso responde.
+acrescentarColuna('thoughts', 'usos', 'INTEGER NOT NULL DEFAULT 0');
+acrescentarColuna('thoughts', 'ultimo_uso', 'INTEGER');
+
+// Quem fixou: 'lucas' ou 'thor'. O Thor reavalia o proprio nucleo, mas nunca
+// derruba o que o Lucas fixou na mao — ele pode errar sobre o que importa, e
+// escolha explicita do dono nao e palpite a ser revisado.
+acrescentarColuna('thoughts', 'fixado_por', 'TEXT');
+
+// O que o Thor decidiu sobre a propria memoria, e por que.
+//
+// Guardado separado das memorias de proposito: aqui fica o RACIOCINIO dele, e
+// misturar isso com o que ele sabe sobre o Lucas embaralharia as duas coisas.
+// Serve para a gente poder olhar depois e entender o que ele mudou sozinho.
+db.exec(`
+CREATE TABLE IF NOT EXISTS reflexoes (
+  id         TEXT PRIMARY KEY,
+  observacao TEXT NOT NULL,
+  acoes      TEXT NOT NULL,
+  memorias   INTEGER NOT NULL,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_reflexoes_data ON reflexoes(created_at DESC);
+`);
+
 // Resumo de conversa comprimida. A conversa cresce e, quando enche, o meio
 // vira um resumo — mas o original NUNCA e apagado: fica tudo em `messages`, e
 // isto aqui so substitui o que e ENVIADO ao modelo.

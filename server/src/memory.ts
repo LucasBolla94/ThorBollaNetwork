@@ -76,11 +76,15 @@ export function remember(
   const tipo = normalizeKind(kind);
   const id = newId();
   const ts = now();
+  // O tipo so decide o palpite inicial. Quem manda depois e o uso — ver
+  // `reavaliarNucleo`, que pode promover ou rebaixar isto a qualquer momento.
+  const fixar = fixarSozinho(tipo, confidence);
   db.prepare(
     `INSERT INTO thoughts
-       (id, kind, content, confidence, source_message_id, created_at, updated_at, pinned)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(id, tipo, text, confidence, sourceMessageId, ts, ts, fixarSozinho(tipo, confidence) ? 1 : 0);
+       (id, kind, content, confidence, source_message_id, created_at, updated_at,
+        pinned, fixado_por)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(id, tipo, text, confidence, sourceMessageId, ts, ts, fixar ? 1 : 0, fixar ? 'thor' : null);
 
   // O vetor vem depois, sem segurar a resposta. Se o servico estiver fora do
   // ar o pensamento fica sem vetor e a varredura de pendentes pega mais tarde.
@@ -137,11 +141,22 @@ export function forget(id: string): void {
   db.prepare(`DELETE FROM thoughts WHERE id = ?`).run(id);
 }
 
+/**
+ * O Lucas fixou (ou soltou) na mao.
+ *
+ * Marca `fixado_por = 'lucas'` ao fixar, e e isso que protege a escolha dele
+ * da reavaliacao automatica. Ao soltar, a marca sai e a memoria volta a ser
+ * julgada por uso como qualquer outra.
+ */
 export function togglePin(id: string): void {
-  db.prepare(`UPDATE thoughts SET pinned = 1 - pinned, updated_at = ? WHERE id = ?`).run(
-    now(),
-    id,
-  );
+  const atual = db.prepare(`SELECT pinned FROM thoughts WHERE id = ?`).get(id) as
+    | { pinned: number }
+    | undefined;
+  if (!atual) return;
+  const virando = atual.pinned === 1 ? 0 : 1;
+  db.prepare(
+    `UPDATE thoughts SET pinned = ?, fixado_por = ?, updated_at = ? WHERE id = ?`,
+  ).run(virando, virando ? 'lucas' : null, now(), id);
 }
 
 /** Escapa a consulta para o FTS5, que trata aspas e operadores como sintaxe. */
@@ -344,6 +359,10 @@ export async function recall(query: string, limit = 12): Promise<string> {
     role: string;
   }[];
 
+  // O que foi recuperado conta como usado. E a unica evidencia que existe
+  // sobre o que importa de verdade, e e ela que decide o nucleo depois.
+  marcarUso(juntos.slice(0, limit).map((t) => t.id));
+
   const partes: string[] = [];
   if (juntos.length) {
     partes.push(
@@ -518,7 +537,7 @@ export async function buscarPorSentido(consulta: string, limite = 10): Promise<A
 
   const notas = carregarIndice()
     .map((e) => ({ e, nota: proximidade(alvo, e.vetor) }))
-    .filter((x) => x.nota >= PROXIMO)
+    .filter((x) => x.nota >= calibrarLimiar().limiar)
     .sort((a, b) => b.nota - a.nota)
     .slice(0, limite);
   if (notas.length === 0) return [];
@@ -551,3 +570,183 @@ export function estatisticasDoIndice() {
   ).n;
   return { total, comVetor, semVetor: total - comVetor, fixados: fixados() };
 }
+
+// ===========================================================================
+// O nucleo deixa de ser regra minha e passa a ser evidencia dele
+//
+// Ate aqui, o que o Thor sabia de cor era decidido por uma lista de tipos que
+// EU escrevi: preferencia e decisao entram, o resto nao. Funciona como chute
+// inicial e so isso — porque a pergunta de verdade nao e "de que tipo e esta
+// memoria?", e sim **"esta memoria tem servido para alguma coisa?"**.
+//
+// Agora o tipo e so o ponto de partida. Quem manda e o uso: memoria que volta
+// a ser util sobe para o nucleo; memoria que ninguem busca ha muito tempo
+// desce para o arquivo, sem ser apagada.
+//
+// O que o Lucas fixou na mao nunca e derrubado. Ele pode errar sobre o que
+// importa para o Lucas; escolha explicita do dono nao e palpite a ser revisto.
+// ===========================================================================
+
+/** Chute inicial por tipo, usado so enquanto nao ha uso para olhar. */
+const PRIOR: Record<string, number> = {
+  preferencia: 1.0,
+  decisao: 0.9,
+  projeto: 0.5,
+  pessoa: 0.5,
+  fato: 0.25,
+};
+
+const DIA = 86_400_000;
+
+/**
+ * Quanto esta memoria merece estar no nucleo.
+ *
+ * Tres forcas:
+ *   - o tipo, que vale enquanto nao se sabe mais nada
+ *   - o uso, que vale cada vez mais e sempre vence o tipo
+ *   - o tempo sem uso, que desconta devagar
+ *
+ * O logaritmo no uso e de proposito: a diferenca entre ser usada uma vez e
+ * cinco e enorme; entre cinquenta e cem, quase nenhuma.
+ */
+export function pontuarMemoria(t: {
+  kind: string;
+  confidence: number;
+  usos: number;
+  ultimoUso: number | null;
+  createdAt: number;
+}): number {
+  const prior = PRIOR[t.kind] ?? 0.3;
+  const uso = Math.log1p(t.usos ?? 0) * 0.8;
+
+  // Sem uso nenhum, o que conta e ser recente: memoria nova ainda nao teve
+  // chance de provar nada, e enterra-la no arquivo tira essa chance.
+  const referencia = t.ultimoUso ?? t.createdAt;
+  const dias = Math.max(0, (Date.now() - referencia) / DIA);
+  const frescor = Math.exp(-dias / 45);
+
+  return (prior * 0.6 + uso + frescor * 0.4) * (0.5 + t.confidence * 0.5);
+}
+
+type Linha = {
+  id: string;
+  kind: string;
+  confidence: number;
+  usos: number;
+  ultimoUso: number | null;
+  createdAt: number;
+  pinned: number;
+  fixadoPor: string | null;
+};
+
+const vivasComUso = (): Linha[] =>
+  db
+    .prepare(
+      `SELECT id, kind, confidence, usos, ultimo_uso AS ultimoUso,
+              created_at AS createdAt, pinned, fixado_por AS fixadoPor
+         FROM thoughts WHERE superseded_by IS NULL`,
+    )
+    .all() as Linha[];
+
+/**
+ * Reavalia quem fica no nucleo. Devolve o que mudou.
+ *
+ * Roda depois de guardar e depois de refletir. E barato: nenhuma chamada de
+ * modelo, so uma conta sobre o que ja esta no banco.
+ */
+export function reavaliarNucleo(): { promovidos: number; rebaixados: number } {
+  const todas = vivasComUso();
+  if (todas.length === 0) return { promovidos: 0, rebaixados: 0 };
+
+  const doLucas = todas.filter((t) => t.fixadoPor === 'lucas');
+  const resto = todas
+    .filter((t) => t.fixadoPor !== 'lucas')
+    .map((t) => ({ t, nota: pontuarMemoria(t) }))
+    .sort((a, b) => b.nota - a.nota);
+
+  const vagas = Math.max(0, TETO_FIXADOS - doLucas.length);
+  const devemFicar = new Set(resto.slice(0, vagas).map((x) => x.t.id));
+
+  const subir = db.prepare(
+    `UPDATE thoughts SET pinned = 1, fixado_por = 'thor', updated_at = ? WHERE id = ?`,
+  );
+  const descer = db.prepare(
+    `UPDATE thoughts SET pinned = 0, updated_at = ? WHERE id = ? AND fixado_por IS NOT 'lucas'`,
+  );
+
+  let promovidos = 0;
+  let rebaixados = 0;
+  const agora = now();
+  for (const { t } of resto) {
+    const deveria = devemFicar.has(t.id);
+    if (deveria && t.pinned !== 1) {
+      subir.run(agora, t.id);
+      promovidos++;
+    } else if (!deveria && t.pinned === 1) {
+      descer.run(agora, t.id);
+      rebaixados++;
+    }
+  }
+  return { promovidos, rebaixados };
+}
+
+/** Marca que estas memorias serviram para alguma coisa. */
+export function marcarUso(ids: string[]): void {
+  if (ids.length === 0) return;
+  const marcas = ids.map(() => '?').join(',');
+  db.prepare(
+    `UPDATE thoughts SET usos = usos + 1, ultimo_uso = ? WHERE id IN (${marcas})`,
+  ).run(now(), ...ids);
+}
+
+// ===========================================================================
+// O limiar da busca, calibrado pelo proprio acervo
+//
+// 0,3 foi um numero que EU medi uma vez, com cinco frases que eu inventei.
+// Serve de ponto de partida e nada mais: o que e "parecido o bastante" depende
+// do que esta guardado, e isso muda conforme a memoria cresce.
+//
+// A calibracao olha pares ao acaso do proprio acervo. A esmagadora maioria de
+// dois pensamentos sorteados nao tem relacao nenhuma entre si, entao essa
+// distribuicao e um retrato do que "sem relacao" parece AQUI. O limiar fica
+// acima dela.
+// ===========================================================================
+
+const MINIMO_PARA_CALIBRAR = 20;
+let limiarEmCache: { valor: number; ate: number } | null = null;
+
+export function calibrarLimiar(): { limiar: number; base: string } {
+  if (limiarEmCache && Date.now() < limiarEmCache.ate) {
+    return { limiar: limiarEmCache.valor, base: 'em cache' };
+  }
+
+  const entradas = carregarIndice();
+  if (entradas.length < MINIMO_PARA_CALIBRAR) {
+    // Com pouca memoria a amostra nao diz nada, e um limiar errado calado e
+    // pior que um chute assumido.
+    return { limiar: PROXIMO, base: `poucas memorias (${entradas.length})` };
+  }
+
+  const amostras: number[] = [];
+  const alvo = Math.min(600, entradas.length * 4);
+  for (let i = 0; i < alvo; i++) {
+    const a = entradas[Math.floor(Math.random() * entradas.length)];
+    const b = entradas[Math.floor(Math.random() * entradas.length)];
+    if (a.id === b.id) continue;
+    amostras.push(proximidade(a.vetor, b.vetor));
+  }
+  if (amostras.length < 50) return { limiar: PROXIMO, base: 'amostra pequena' };
+
+  amostras.sort((x, y) => x - y);
+  const p95 = amostras[Math.floor(amostras.length * 0.95)];
+
+  // Piso e teto: a calibracao corrige o chute, nao o substitui por outro
+  // chute. Fora desta faixa, quem manda e o numero medido.
+  const valor = Math.min(0.6, Math.max(0.2, p95 + 0.05));
+  limiarEmCache = { valor, ate: Date.now() + 10 * 60_000 };
+  return { limiar: valor, base: `p95 de ${amostras.length} pares ao acaso` };
+}
+
+export const esquecerLimiar = (): void => {
+  limiarEmCache = null;
+};

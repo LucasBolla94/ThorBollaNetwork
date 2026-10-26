@@ -1,7 +1,15 @@
 import type { FastifyInstance } from 'fastify';
 import { db, newId, now } from '../db.ts';
 import { SESSION_COOKIE, readSession, trocarTiquete } from '../auth.ts';
-import { activeModel, hasKey, streamChat, LlmError, type ToolCall, type Usage } from '../llm.ts';
+import {
+  activeModel,
+  hasKey,
+  provider,
+  streamChat,
+  LlmError,
+  type ToolCall,
+  type Usage,
+} from '../llm.ts';
 import { extractAndStore, stats } from '../memory.ts';
 import { aoMudar, cancelarPendentes, decidir, pendentes } from '../aprovacao.ts';
 import {

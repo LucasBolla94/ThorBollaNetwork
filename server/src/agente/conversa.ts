@@ -2,7 +2,7 @@ import { db, newId, now } from '../db.ts';
 import { alma } from '../alma.ts';
 import { turnosDaConversa } from './compressao.ts';
 import { coreBlock, extractAndStore, recall } from '../memory.ts';
-import { complete, type Prompt, type Tool, type Turn } from '../llm.ts';
+import { complete, hasKey, type Prompt, type Tool, type Turn } from '../llm.ts';
 import { executar } from '../executar.ts';
 
 // O que o agente usa para pensar: as ferramentas que ele pode chamar, o

@@ -3,7 +3,9 @@
 Como ele deve lembrar das coisas, e como a personalidade dele deve funcionar.
 Espelhado no Hermes, que é o projeto mais maduro que temos de referência.
 
-Nada aqui foi feito ainda. É para decidir.
+**Isto foi construído.** O que está escrito aqui é o que está rodando —
+ver [plano.md](plano.md) §40 para o que mudou na execução. As medições do
+embed são de verdade, feitas neste servidor.
 
 ---
 

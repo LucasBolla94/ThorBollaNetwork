@@ -880,3 +880,76 @@ O que subiu público: o código inteiro e os documentos, que citam `bolla.networ
 e descrevem como o servidor é defendido, incluindo onde ainda tem folga. Se
 preferir fechar, é um botão no GitHub — e aí o servidor vai precisar de uma
 chave de leitura, que eu configuro.
+
+---
+
+## Sessão 34 — a memória existe
+
+**O pedido:** fazer tudo. Memória espelhada no Hermes, com o banco e o embed,
+personalidade inspirada no JARVIS, testado e entregue funcionando.
+
+### A personalidade
+
+Está em `server/personalidade.md`, no projeto. Pesquisei o JARVIS e peguei o
+que serve: o **ponto fixo ao lado de alguém agitado**, calmo na notícia ruim,
+seco quando cabe, e opinião em vez de cardápio. Deixei de fora o que não serve
+— nada de "senhor", nada de mordomo.
+
+Tirar do banco e pôr em arquivo fez sumir toda aquela lógica de migração que
+me deu trabalho. O git já fazia esse trabalho desde sempre. Você ainda pode
+editar pela tela; restaurar volta ao arquivo.
+
+### A memória
+
+**Agora ela se enche sozinha.** Preferência e decisão entram fixadas
+automaticamente. Fato não entra — "a reunião mudou para quinta" é passageiro.
+Tem teto de 40, porque o que fica fixado é pago em toda mensagem.
+
+**Acha pelo sentido.** O serviço de embed está rodando no seu servidor, usando
+1,4 GB dos 31 GB. Ele acha "não gosto de listas" quando você guardou "odeia
+receber várias opções". Se ele cair, a busca por palavra continua e o Thor só
+fica mais cego.
+
+**A conversa parou de esquecer.** Antes ele levava as 24 últimas mensagens e o
+começo sumia. Agora cresce, e quando enche o meio vira um resumo feito por um
+modelo barato. Nada é apagado do banco.
+
+**E ele colhe no fim.** A cada 6 mensagens um modelo barato lê o trecho e
+guarda o que continua verdade depois que a conversa acabar.
+
+### A prova
+
+O teste que importa é o ponta a ponta: eu conto uma preferência ao Thor numa
+conversa, abro **outra** conversa e pergunto. Ele respondeu:
+
+> "Escolho uma opção só e digo qual é, com a justificativa em uma linha. Nada
+> de cardápio. Você já deixou claro que odeia receber várias opções."
+
+Sem eu repetir. Funcionou.
+
+### Três erros que só apareceram quando a memória passou a funcionar
+
+Vale você saber, porque todos tinham a mesma forma: **código que nunca roda não
+está certo, está só calado.**
+
+1. Quando separei o arquivo de mil linhas em módulos, duas funções ficaram
+   definidas num lugar e usadas noutro, sem ligação. Como o projeto roda sem
+   compilar, nada tropeçava nisso — quebrava na primeira mensagem de uma
+   conversa nova. Agora existe `infra/verificar.sh`, que roda o compilador
+   antes de publicar.
+2. O pensamento era gravado apontando para uma mensagem que ainda não existia.
+   Esse erro estava ali desde sempre e nunca aparecia, porque a memória nunca
+   chegava a guardar nada.
+3. As partes pagas do teste estavam sendo puladas em silêncio.
+
+### O que ficou medido
+
+| | |
+|---|---|
+| testes de memória | 47 conferências |
+| teste ponta a ponta | conversa real |
+| comandos e aprovação | 95 conferências |
+| embed em repouso | 1,4 GB |
+| Thor | 78 MB |
+
+O site está no ar e os três serviços ativos.

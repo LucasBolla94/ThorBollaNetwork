@@ -17,6 +17,7 @@ Roda em <https://bolla.network>.
 | `mobile/` | o app de iPhone, em Expo |
 | `infra/` | o que põe no ar: systemd, Caddy, instalação e deploy |
 | `voz/` | ferramentas para treinar a voz dele |
+| `ferramentas/` | o serviço de embed e scripts de medição |
 | `docs/` | [o plano](docs/plano.md) e [o diário](docs/diario.md) |
 
 ---
@@ -112,6 +113,26 @@ sudo bash infra/bootstrap.sh
 
 Dados e segredos ficam **fora** do repositório justamente porque o deploy
 apaga o que não está versionado.
+
+---
+
+## Memória
+
+Quatro gavetas, da mais quente para a mais fria:
+
+| gaveta | o que guarda | vai em toda mensagem? |
+|---|---|---|
+| **personalidade** | `server/personalidade.md`, no git | sim |
+| **núcleo** | preferências e decisões, fixadas sozinhas | sim |
+| **conversa** | cresce; o meio vira resumo ao encher | sim |
+| **arquivo** | o resto, por busca | não |
+
+A busca acha **por palavra e por sentido**: "não gosto de listas" encontra
+"odeia receber várias opções". O sentido vem de um serviço de embed que roda no
+próprio servidor, sem placa de vídeo. Se ele cair, a busca por palavra
+continua.
+
+Detalhe em [docs/memoria.md](docs/memoria.md).
 
 ---
 

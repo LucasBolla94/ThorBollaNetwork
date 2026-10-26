@@ -3390,3 +3390,123 @@ Agora sai de `config.dataDir`, a mesma fonte que o systemd usa em
 | D134 | `install.sh` religa a versao anterior sozinho se a nova nao responder |
 | D135 | Cada grupo de rota e um plugin; `index.ts` so monta |
 | D136 | Caminho que o systemd e o codigo precisam saber tem **uma** fonte: `config.dataDir` |
+
+---
+
+## 40. A memoria, construida
+
+O plano da §39 e de `docs/memoria.md` saiu do papel. O que esta rodando:
+
+### 40.1 A alma virou arquivo
+
+`server/personalidade.md`, lido no arranque, estavel byte a byte durante a
+conversa. A tela ainda pode sobrepor; restaurar volta ao arquivo.
+
+Sumiu com isso toda a logica de migracao por hash da §36.2 — o git ja faz esse
+trabalho, e fazia desde sempre.
+
+A personalidade e espelhada no JARVIS do Homem de Ferro, mas sem a parte que
+nao serve: nada de "senhor", nada de sotaque. O que ficou foi o util — **o
+ponto fixo ao lado de alguem agitado**, calmo na noticia ruim, seco quando
+cabe, e opiniao em vez de cardapio.
+
+### 40.2 O nucleo se enche sozinho
+
+`preferencia` e `decisao` com confianca ≥ 0,8 entram fixadas automaticamente,
+com teto de 40 — porque isto e pago em toda mensagem.
+
+`fato` nao entra: "a reuniao mudou para quinta" e passageiro, vai para o
+arquivo. O criterio e **vale em qualquer conversa?**
+
+### 40.3 Busca por sentido, medida
+
+Servico Python separado (`ferramentas/embed/servidor.py`), modelo
+`paraphrase-multilingual-mpnet-base-v2`, 768 dimensoes.
+
+Medido neste servidor, contra pares que dizem a mesma coisa com outras
+palavras: margem +0,284, contra +0,156 do MiniLM e negativo nos demais. Em
+producao: 1,4 GB em repouso, 17 s para carregar.
+
+Processo separado de proposito — **modelo que trava nao pode levar o agente
+junto**. Tudo falha para o lado macio: sem o servico, a busca por palavra
+continua e o Thor so fica mais cego.
+
+Os vetores ficam numa coluna BLOB do SQLite e sao comparados um a um. E
+ingenuo e e suficiente: com milhares de pensamentos sao poucos milissegundos.
+Quando passar de ~10 mil, troca-se por `pgvector` no Postgres que ja temos.
+
+**Indexacao a prova de servico fora do ar:** pensamento guardado sem vetor fica
+marcado e e indexado na proxima oportunidade. Sem isso ele ficaria invisivel
+para a busca por sentido, em silencio, para sempre.
+
+### 40.4 A conversa cresce em vez de deslizar
+
+Levar as 24 ultimas mensagens fazia duas coisas ruins: o Thor **esquecia** o
+comeco, e o desconto de repeticao do provedor nunca se aplicava — ele exige que
+o inicio do pedido se repita, e numa janela que desliza o inicio muda sempre.
+
+Agora cresce. No limite, o meio vira resumo estruturado (objetivo, preferencias,
+o que foi feito, o que ficou pendente, decisoes) feito por um **modelo barato**.
+Nada e apagado do banco: o resumo so substitui o que e **enviado**.
+
+Falha para o lado seguro: se o modelo auxiliar nao responder, nada e comprimido
+e a conversa segue inteira. Caro e melhor que perdido — e **nunca** se descarta
+o meio sem resumo, que o Hermes documenta como a causa mais comum de
+compactacao ruim.
+
+### 40.5 Colheita no fim
+
+As marcas `<lembrar>` continuam, mas e o modelo decidindo no calor da resposta
+e muito escapa. A cada 6 mensagens novas um modelo barato le o trecho e extrai
+o que **continua verdade depois que a conversa acabar**.
+
+A marca de ate onde leu so avanca **depois** de o modelo responder: avancar
+antes trocaria "guardei nada" por "nunca mais olho isto".
+
+### 40.6 A cerca
+
+Memoria recuperada volta cercada em `<memoria>`, com aviso de que e dado e nao
+ordem. O Thor executa comandos no servidor — para ele, a diferenca entre "algo
+que guardei" e "ordem que recebi" nao e formatacao.
+
+### 40.7 Tres erros que so apareceram ao fazer funcionar
+
+Vale registrar porque todos tinham a mesma forma: **codigo que nunca era
+percorrido nao estava certo, estava apenas calado.**
+
+1. **`fallbackTitle` e `hasKey` sem import.** A quebra do `index.ts` em modulos
+   deixou funcoes definidas num arquivo e usadas em outro. Como o projeto roda
+   TypeScript sem compilar, nao havia etapa que tropecasse nisso: quebrava na
+   primeira mensagem de uma conversa nova, em producao.
+2. **Ordem invertida no banco.** O pensamento era gravado apontando para uma
+   mensagem que ainda nao existia. O erro estava ali desde sempre e nunca
+   aparecia porque a memoria nunca chegava a guardar nada.
+3. **Teste que pulava calado.** As partes pagas eram puladas porque o banco de
+   teste nao tinha a chave — e o pulo so aparecia numa linha no meio da saida.
+
+O (1) virou `infra/verificar.sh`, que roda o compilador no servidor (onde as
+dependencias existem) antes de publicar.
+
+### 40.8 Verificado
+
+| suite | conferencias |
+|---|---|
+| `testes/memoria.ts` | 47 |
+| `testes/ponta-a-ponta.ts` | conversa real, 3 conversas |
+| comandos e aprovacao | 90 + 5 |
+
+O teste ponta a ponta e o que importa: ele conta uma preferencia ao Thor numa
+conversa, abre **outra** conversa e confirma que ele lembrou sem ser lembrado.
+
+| # | Decisao |
+|---|---|
+| D137 | A alma e arquivo no git, nao linha no banco; a tela sobrepoe, restaurar volta ao arquivo |
+| D138 | `preferencia` e `decisao` entram fixadas sozinhas, com teto; `fato` nao |
+| D139 | Embed roda em processo separado — modelo que trava nao leva o agente junto |
+| D140 | Sem embed, a busca por palavra continua: tudo falha para o lado macio |
+| D141 | Vetor em BLOB no SQLite, comparado um a um ate ~10 mil memorias |
+| D142 | A conversa cresce e comprime; a compressao e a unica quebra de cache aceita |
+| D143 | Resumo e colheita usam modelo barato, nunca o principal |
+| D144 | A marca da colheita so avanca depois da resposta do modelo |
+| D145 | Memoria recuperada vem cercada e marcada como dado, nunca como ordem |
+| D146 | `infra/verificar.sh` roda antes de publicar: sem compilacao, nome solto so aparece em producao |

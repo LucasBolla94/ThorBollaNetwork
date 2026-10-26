@@ -3510,3 +3510,72 @@ conversa, abre **outra** conversa e confirma que ele lembrou sem ser lembrado.
 | D144 | A marca da colheita so avanca depois da resposta do modelo |
 | D145 | Memoria recuperada vem cercada e marcada como dado, nunca como ordem |
 | D146 | `infra/verificar.sh` roda antes de publicar: sem compilacao, nome solto so aparece em producao |
+
+---
+
+## 41. A personalidade, refeita a partir do que o JARVIS faz
+
+### 41.1 O erro de origem
+
+A §40.1 dizia que a personalidade era espelhada no JARVIS. Era espelhada no
+**som** dele — o tom seco — e nao no que ele faz. A pesquisa tinha sido rasa.
+
+O que o JARVIS faz, com exemplo do filme:
+
+| funcao | fala |
+|---|---|
+| da o numero antes da decisao | *"Com apenas 19% de energia, as chances de alcancar essa altitude…"* |
+| acha a saida e ja diz qual | *"Localizei uma fraqueza na armadura do Stane. O senhor precisa se aproximar."* |
+| oferece e pede o aval | *"Devo renderizar com as especificacoes propostas?"* |
+| avisa do que ninguem perguntou | aponta o cilindro antes de alguem notar |
+| discorda sem assumir o controle | da o numero contrario e executa assim mesmo |
+
+**Ele nunca decide pelo Tony. Faz o Tony decidir sabendo o que vai acontecer.**
+
+### 41.2 A regra de comunicacao, invertida
+
+A versao anterior mandava o oposto do certo: "opiniao em vez de cardapio,
+escolha uma". Isso veio de uma leitura errada minha — o Lucas pediu **menos
+detalhe tecnico**, nao **menos opcao**.
+
+Agora a personalidade manda, diante de uma escolha:
+
+> **O que ganha, o que perde, e o que pode dar errado de cada lado.** Depois a
+> recomendacao com o porque, em uma linha. Duas ou tres opcoes, nunca cinco.
+
+Com a ressalva de que pergunta simples com um caminho so continua tendo
+resposta simples — nem toda frase vira analise.
+
+E trata por senhor.
+
+### 41.3 Uma leitura minha virou verdade dele
+
+A conclusao errada nao ficou so na personalidade: entrou na **memoria** como
+preferencia do Lucas, e o teste ponta a ponta a reensinava a cada execucao.
+
+Tres consertos:
+
+1. A memoria foi corrigida pelo caminho de correcao do proprio sistema — a
+   versao errada fica como superada, nao apagada.
+2. A personalidade ganhou a regra: **guarde o que ele disse, nao a sua leitura
+   do que ele disse.** Conclusao errada guardada vira verdade errada em toda
+   conversa seguinte.
+3. O teste passou a ensinar um fato neutro.
+
+### 41.4 Tres bugs que so a conversa real achou
+
+| bug | efeito |
+|---|---|
+| `2>&1` casava com a regra do `&` de segundo plano | a forma mais comum da shell era recusada, com motivo sem sentido |
+| `2>/dev/null` casava com a regra de gravacao | calar erro esperado era tratado como escrever arquivo |
+| `extractAndStore` passava `'fato'` fixo para toda correcao | corrigir uma preferencia a tirava do nucleo em silencio |
+
+Os tres passavam em todos os testes de unidade. Nenhum sobreviveu a primeira
+conversa de verdade.
+
+| # | Decisao |
+|---|---|
+| D147 | A personalidade vem do que o JARVIS **faz**, nao de como soa: calcular antes, avisar do que ninguem perguntou, nunca decidir pelo dono |
+| D148 | Diante de escolha: ganho, perda e risco de cada lado, depois a recomendacao |
+| D149 | Guardar o que o Lucas disse, nunca a interpretacao — foi assim que uma memoria errada nasceu |
+| D150 | `/dev/null` e descarte, nao escrita; `2>&1` nao e segundo plano |

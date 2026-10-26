@@ -953,3 +953,75 @@ está certo, está só calado.**
 | Thor | 78 MB |
 
 O site está no ar e os três serviços ativos.
+
+---
+
+## Sessão 35 — o JARVIS de verdade, e uma memória errada que eu criei
+
+### O erro que importava mais
+
+Eu tinha entendido errado uma coisa que você disse. Você pediu **menos detalhe
+técnico**; eu entendi **menos opções**. E guardei isso na memória do Thor como
+se fosse preferência sua:
+
+> "O Lucas odeia receber várias opções."
+
+Pior: coloquei isso na personalidade dele, e o teste automático reensinava a
+mesma coisa toda vez que rodava. Uma conclusão minha virou verdade dele.
+
+Corrigido. Agora está guardado o que você realmente quer:
+
+> "Diante de uma escolha, o Lucas quer ver os caminhos com o que cada um ganha,
+> perde e arrisca, e só depois a recomendação com o motivo. Em linguagem
+> simples."
+
+Usei o caminho de correção do próprio sistema, então a versão errada fica
+registrada como superada — dá para ver que existiu e o que virou.
+
+E entrou uma regra nova na personalidade, para isso não se repetir:
+**guarde o que ele disse, não a sua leitura do que ele disse.**
+
+### A pesquisa do JARVIS, feita direito
+
+A primeira vez eu pesquisei por cima e trouxe só o tom seco. O que importa
+nele é outra coisa — **ele calcula antes de o Tony agir**:
+
+| o que ele faz | no filme |
+|---|---|
+| dá o número antes da decisão | *"Com apenas 19% de energia, as chances de alcançar essa altitude…"* |
+| acha a saída e já diz qual | *"Localizei uma fraqueza na armadura do Stane. O senhor precisa se aproximar."* |
+| oferece e pede o aval | *"Devo renderizar com as especificações propostas?"* |
+| avisa do que ninguém perguntou | aponta o problema no cilindro antes de alguém notar |
+| discorda sem assumir o controle | dá o número contrário e executa assim mesmo |
+
+**Ele nunca decide pelo Tony. Faz o Tony decidir sabendo o que vai acontecer.**
+
+É isso que o Thor é agora. E trata por senhor.
+
+### Funcionando
+
+No teste, perguntei onde guardar os backups. Ele foi buscar os números antes de
+opinar:
+
+> "Os dados do Thor ocupam 1,3 GB. O disco tem 108 GB livres, com 22% de uso.
+> `/opt/thor/data` está na mesma partição do sistema. O senhor tem dois
+> caminhos. **No próprio servidor** — Ganha: … Perde: …"
+
+E numa outra conversa, sobre o horário que eu tinha contado antes:
+
+> "Entre meia-noite e quatro da manhã, senhor. Foi o que o senhor mesmo me
+> disse. Tem um porém: rendimento de madrugada costuma cobrar no dia seguinte."
+
+Avisou sem eu perguntar.
+
+### Três bugs que o teste de conversa real achou
+
+1. **`2>&1` era recusado** como se fosse rodar em segundo plano. É a forma mais
+   comum da shell inteira, e o motivo da recusa não fazia sentido nenhum.
+2. **`2>/dev/null` era recusado** como gravação de arquivo. Jogar fora não é
+   gravar.
+3. **Corrigir uma memória perdia o tipo dela**, e com isso ela caía do núcleo
+   em silêncio — justamente quando estava sendo consertada.
+
+Os três só apareceram porque o teste conversa de verdade, em vez de testar as
+peças separadas.

@@ -90,7 +90,7 @@ export const config = {
 
   openrouterKey: process.env.OPENROUTER_API_KEY ?? '',
   model: process.env.LUK_MODEL ?? 'anthropic/claude-sonnet-5.5',
-  siteName: process.env.LUK_SITE_NAME ?? 'Thor',
+  siteName: env('SITE_NAME') ?? 'Thor',
   publicUrl: process.env.LUK_PUBLIC_URL ?? 'https://bolla.network',
 } as const;
 

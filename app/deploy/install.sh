@@ -69,6 +69,21 @@ log "dependencias"
 cd "$ROOT/server"
 "$NPM" install --omit=dev --no-audit --no-fund --loglevel=error
 
+log "versao do cache do PWA"
+# Carimba o service worker com a marca do que esta sendo instalado.
+#
+# A versao ficava escrita na mao, e numa troca de nome do agente ela nao foi
+# trocada junto: quem tivesse o site na tela inicial continuava com a casca
+# antiga em cache. Como o service worker busca na rede primeiro, ninguem viu —
+# mas offline serviria conteudo velho, e isso so apareceria no pior momento.
+#
+# Dependendo de alguem lembrar, cedo ou tarde nao lembra. Entao a versao passa
+# a ser derivada do conteudo: se os arquivos mudaram, o cache antigo cai.
+MARCA=$(cat "$ROOT"/web/app.js "$ROOT"/web/app.css "$ROOT"/web/index.html 2>/dev/null \
+  | sha256sum | cut -c1-12)
+sed -i "s/^const VERSION = .*/const VERSION = 'thor-$MARCA';/" "$ROOT/web/sw.js"
+echo "   cache marcado como thor-$MARCA"
+
 log "icones do PWA"
 if command -v rsvg-convert >/dev/null 2>&1; then
   for size in 192 512; do

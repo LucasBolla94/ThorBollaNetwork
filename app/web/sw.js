@@ -10,7 +10,7 @@
 //   - trocar VERSION limpa todo cache antigo e assume o controle na hora
 // =========================================================================
 
-const VERSION = 'luk-v3';
+const VERSION = 'thor-v4';
 const SHELL = [
   '/',
   '/index.html',

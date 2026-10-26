@@ -1568,3 +1568,41 @@ body.thinking .composer-box {
   .aprov { margin-left: 0; }
   .aprov-acoes button { flex: 1 1 0; }
 }
+
+/* ------------------------------------------------- alvos de toque no celular
+
+   O layout ja cabia na tela do telefone, mas caber nao e o mesmo que dar para
+   usar: os campos tinham 39px de altura e o "Esqueci minha senha", 24px. A
+   Apple pede 44pt como minimo para alvo de toque, e abaixo disso o dedo erra —
+   principalmente num link de senha, que a pessoa procura justamente quando ja
+   esta irritada.
+
+   Vale por `pointer: coarse` tambem, e nao so por largura: tablet e telefone
+   em paisagem sao largos e continuam sendo tocados com o dedo. */
+
+@media (max-width: 860px), (pointer: coarse) {
+  .gate input,
+  .gate select,
+  .gate button,
+  .card input,
+  .card select {
+    min-height: 46px;
+  }
+
+  /* Botao que parece link: a area de toque cresce sem o texto crescer junto. */
+  .gate .link,
+  .card .link {
+    min-height: 44px;
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+
+  /* 16px e o limite abaixo do qual o Safari do iPhone da zoom sozinho ao focar
+     o campo, e o zoom nao volta depois — a tela fica torta pelo resto da
+     sessao. */
+  .gate input,
+  .card input,
+  #input {
+    font-size: 16px;
+  }
+}

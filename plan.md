@@ -3104,3 +3104,92 @@ caractere invisivel no fim da primeira linha.
 | D117 | O app usa a mesma sessao do site: `Bearer` + Keychain; o token so sai no corpo quando o cliente pede |
 | D118 | Websocket do app abre com **tiquete de uso unico de 30s**, nunca com o token, porque URL vai para o log |
 | D119 | Gravacoes de voz ficam fora do git: audio limpo da voz de alguem e material de clonagem |
+
+---
+
+## 37. Chegar nele de qualquer lugar
+
+### 37.1 Por que o app Expo nao "fica no servidor"
+
+O pedido foi deixar o app online no servidor para acessar fora do wifi. Nao da,
+e vale registrar o motivo para nao se tentar de novo:
+
+O que roda na maquina do Lucas com `expo start` e o **Metro**, um empacotador de
+desenvolvimento. Ele observa arquivos, reconstroi a cada mudanca e serve pacote
+de debug. Hospedar isso 24/7 seria usar ferramenta de oficina como peca de
+carro: pesado, fragil, e exige o codigo-fonte no servidor.
+
+Para um app nativo que abre de qualquer lugar existem dois caminhos, e os dois
+tem porteiro:
+
+| caminho | o que da | o que exige |
+|---|---|---|
+| EAS Build + TestFlight | icone de verdade, sem Expo Go | conta Apple Developer, US$99/ano |
+| EAS Update + Expo Go | abre de qualquer rede | conta Expo (gratis), e o Expo Go instalado |
+
+### 37.2 O que ja resolvia, e ninguem tinha usado
+
+O site **ja era um app instalavel** e ninguem tinha instalado. Ele tem
+`manifest.webmanifest` com `display: standalone`, `apple-touch-icon`,
+`apple-mobile-web-app-capable`, service worker, HTTPS e dominio proprio. No
+iPhone, "Adicionar a Tela de Inicio" poe um icone que abre sem barra de
+navegador, de qualquer rede, sem App Store e sem custo.
+
+Os PNGs do icone nao estao no repositorio de proposito: o `install.sh` gera os
+tres tamanhos a partir do `icon.svg` com `rsvg-convert` a cada deploy. Uma fonte
+de verdade, nao quatro arquivos para manter em sincronia.
+
+### 37.3 A versao do cache deixou de ser escrita na mao
+
+O service worker tinha `VERSION = 'luk-v3'` fixo no codigo, e na troca de nome
+do agente ela **nao foi trocada junto**. Como a estrategia e rede-primeiro,
+ninguem viu — mas offline o telefone serviria a casca antiga, e isso so
+apareceria no pior momento possivel.
+
+O problema nao e a versao errada, e **depender de alguem lembrar**. Agora o
+`install.sh` deriva a versao do conteudo:
+
+```sh
+MARCA=$(cat web/app.js web/app.css web/index.html | sha256sum | cut -c1-12)
+sed -i "s/^const VERSION = .*/const VERSION = 'thor-$MARCA';/" web/sw.js
+```
+
+Mudou arquivo, muda a marca, cai o cache velho. Ninguem precisa lembrar de nada.
+
+### 37.4 Caber na tela nao e o mesmo que dar para usar
+
+Medindo a pagina em 375px, o layout estava correto: sem rolagem horizontal,
+nada vazando, cartao ocupando 327 de 375px. Mas os alvos de toque estavam
+pequenos demais:
+
+| elemento | antes | agora |
+|---|---|---|
+| campo de e-mail | 39px | 50px |
+| campo de senha | 39px | 50px |
+| "Esqueci minha senha" | 24px | 44px |
+
+A Apple pede 44pt de minimo. Abaixo disso o dedo erra — e errar justamente no
+link de senha, que a pessoa procura quando ja esta irritada, e o pior lugar
+para economizar pixel.
+
+Junto veio uma armadilha especifica do iPhone: **campo com fonte menor que 16px
+faz o Safari dar zoom sozinho ao receber o foco, e o zoom nao volta**. A tela
+fica torta pelo resto da sessao. Os campos agora sao 16px no celular.
+
+A regra vale por `pointer: coarse` tambem, nao so por largura: tablet e telefone
+deitado sao largos e continuam sendo tocados com o dedo.
+
+### 37.5 O que falta para ser util de verdade no bolso
+
+**Aviso de aprovacao.** Hoje o cartao so aparece se o site estiver aberto. Um
+pedido que vence em 120 segundos sem avisar ninguem e um pedido que vai vencer.
+iOS 16.4+ aceita Web Push em PWA instalado, entao da para fazer sem App Store —
+precisa de chaves VAPID, guardar a inscricao do aparelho e disparar quando o
+pedido nasce.
+
+| # | Decisao |
+|---|---|
+| D120 | O app Expo nao e hospedado no servidor: Metro e ferramenta de desenvolvimento, nao peca de producao |
+| D121 | O acesso de qualquer lugar e o site instalado na tela de inicio — ja estava pronto, faltava instalar |
+| D122 | A versao do cache do service worker e derivada do conteudo, nao escrita na mao |
+| D123 | Alvo de toque minimo de 44px e campo de 16px no celular, por `pointer: coarse` e nao so por largura |

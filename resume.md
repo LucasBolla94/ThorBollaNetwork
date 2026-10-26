@@ -744,3 +744,56 @@ Deixei de fora, de propósito: **suas gravações de voz**. Não é por tamanho 
 poucos segundos de áudio limpo da sua voz dá para cloná-la, e num repositório
 público isso é material pronto para golpe por telefone. Também ficaram fora os
 repositórios de terceiros em `reference/` e qualquer arquivo de segredo.
+
+---
+
+## Sessão 32 — Thor na tela inicial do iPhone
+
+**O pedido:** deixar ele online no servidor pra acessar fora do wifi.
+
+**O app Expo não dá pra hospedar assim**, e vale você saber por quê: o que roda
+aqui com `expo start` é um empacotador de desenvolvimento. Ele fica observando
+arquivos e reconstruindo. Deixar isso no ar 24/7 é usar ferramenta de oficina
+como peça do carro. Pra app nativo rodando de qualquer lugar são dois caminhos,
+e os dois têm porteiro: TestFlight (conta Apple, US$99/ano) ou Expo Go com conta
+Expo (grátis, mas você precisa do Expo Go instalado).
+
+**O que já resolvia e ninguém tinha usado:** o site já é um app instalável.
+Tem ícone, abre sem barra de navegador, funciona de qualquer rede, sem App
+Store e sem custo.
+
+### Como instalar no iPhone
+
+1. Abra `bolla.network` no **Safari** (tem que ser o Safari)
+2. Botão de compartilhar, embaixo no meio
+3. "Adicionar à Tela de Início"
+
+Vai virar um ícone igual a qualquer app. Inclusive com os cartões de aprovação.
+
+### O que consertei no caminho
+
+**A versão do cache estava escrita na mão** e não foi trocada quando o nome
+mudou. Como o site busca na rede antes do cache, ninguém viu — mas sem internet
+o telefone serviria a tela antiga, e isso só apareceria na pior hora. O
+problema não era a versão errada, era **depender de alguém lembrar**. Agora o
+deploy calcula a versão a partir do conteúdo: mudou arquivo, cai o cache velho.
+
+**Os alvos de toque estavam pequenos.** O layout cabia na tela — isso estava
+certo — mas os campos tinham 39px e o "Esqueci minha senha", 24px. A Apple pede
+44 de mínimo. Agora os campos têm 50 e o link, 44.
+
+**E uma armadilha do iPhone:** campo com fonte menor que 16px faz o Safari dar
+zoom sozinho quando você toca nele, e o zoom não volta — a tela fica torta pelo
+resto da sessão. Os campos agora são 16px no celular.
+
+### O que falta pra ser útil de verdade no bolso
+
+**Aviso de aprovação.** Hoje o cartão só aparece se o site estiver aberto. Um
+pedido que vence em 2 minutos sem avisar ninguém é um pedido que vai vencer.
+Dá pra fazer sem App Store (iOS 16.4+ aceita notificação em site instalado),
+mas é trabalho de verdade: chaves, guardar a inscrição do aparelho, disparar na
+hora certa.
+
+Parei o servidor de desenvolvimento do Expo que estava rodando na sua máquina —
+não serve mais pro que você quer. O app continua no projeto, pronto, se um dia
+você quiser o caminho do TestFlight.

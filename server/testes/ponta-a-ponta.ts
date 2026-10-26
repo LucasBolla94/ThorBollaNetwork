@@ -136,13 +136,22 @@ try {
   );
   console.log(`  ele disse: ${d.texto.slice(0, 320).replace(/\n/g, ' ')}...`);
   ok('trata por senhor', /senhor/i.test(d.texto));
+  // Ele anuncia "o senhor tem dois caminhos" uma vez e separa cada um com
+  // titulo em negrito. Contar a palavra repetida era estreito demais e
+  // reprovava uma resposta certa: o que define a resposta boa e haver mais de
+  // um caminho com ganho e perda de cada lado, nao a escolha da palavra.
   ok(
     'apresenta mais de um caminho',
-    (d.texto.match(/\b(op[cç][aã]o|caminho|alternativa)\b/gi) ?? []).length >= 2 ||
-      /\*\*(A|B|1|2)[\).:]/.test(d.texto),
+    /\b(dois|duas|tr[eê]s)\s+(caminhos|op[cç][oõ]es|alternativas)\b/i.test(d.texto) ||
+      (d.texto.match(/\b(op[cç][aã]o|caminho|alternativa)\b/gi) ?? []).length >= 2 ||
+      (d.texto.match(/^\s*[-*]?\s*\*\*[^*]{3,60}\*\*\s*$/gm) ?? []).length >= 2,
     'o JARVIS nao decide sozinho',
   );
   ok('fala do risco de cada lado', /risco|perde|problema|contra|desvantagem/i.test(d.texto));
+  ok(
+    'diz o que ganha e o que perde',
+    /ganha/i.test(d.texto) && /perde|custa|risco/i.test(d.texto),
+  );
   ok(
     'termina com uma recomendacao',
     /eu iria|recomendo|eu ficaria|minha escolha|eu escolheria|ficaria com/i.test(d.texto),

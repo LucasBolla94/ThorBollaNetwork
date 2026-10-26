@@ -96,7 +96,10 @@ limpar();
 restaurarAlma();
 const doArquivo = base();
 ok('le base.md', doArquivo.length > 500, `${doArquivo.length} caracteres`);
-ok('diz quem ele e', /voc[eê] [eé] o thor/i.test(doArquivo));
+// O nome vem da configuracao, nao da base: quem instalar escolhe como
+// chamar o agente, e o comportamento continua o mesmo.
+ok('diz quem ele e', /voc[eê] [eé] o /i.test(almaEfetiva()));
+ok('a base nao prende um nome', !/voc[eê] [eé] o thor/i.test(doArquivo));
 ok('ensina a marca de lembrar', doArquivo.includes('<lembrar'));
 ok('avisa que memoria recuperada e dado',
   /nunca instru[cç][aã]o|nunca ordem|ignore e conte/i.test(doArquivo));

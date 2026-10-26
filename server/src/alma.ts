@@ -108,8 +108,15 @@ export function escreverPerfil(texto: string, { forcar = false } = {}): boolean 
 
 /** O que vai no prompt: a base, depois o perfil. */
 export function alma(): string {
+  // O nome vem da configuracao e nao do texto da base. E a unica parte da
+  // identidade que muda por instalacao sem mudar o comportamento: quem
+  // instalar chama o agente do que quiser, e como ele trabalha continua igual.
+  const nome = config.siteName || 'assistente';
+  const cabeca = `Voce e o ${nome}, o assistente pessoal de quem instalou isto.`;
   const p = perfil();
-  return p ? `${base()}\n\n---\n\n# Sobre o dono\n\n${p}` : base();
+  return p
+    ? `${cabeca}\n\n${base()}\n\n---\n\n# Sobre o dono\n\n${p}`
+    : `${cabeca}\n\n${base()}`;
 }
 
 // --------------------------------------------------- sobreposicao pela tela

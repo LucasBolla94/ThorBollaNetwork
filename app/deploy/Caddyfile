@@ -1,0 +1,39 @@
+# Luk — proxy e HTTPS automatico.
+# O Caddy pede e renova o certificado Let's Encrypt sozinho; nao ha cron
+# nem certbot no meio. Para isso ele precisa das portas 80 e 443 abertas,
+# o que o ufw ja permite.
+
+bolla.network, www.bolla.network {
+	encode zstd gzip
+
+	# Unica rota do Supabase exposta na internet: a que o link de confirmacao
+	# de e-mail abre. O resto do GoTrue (login, cadastro, admin) fica so no
+	# localhost e e o nosso servidor que fala com ele — assim nao existe porta
+	# publica para tentar senha nem para criar conta direto.
+	handle /auth/v1/verify* {
+		reverse_proxy 127.0.0.1:8000 {
+			header_up X-Real-IP {remote_host}
+		}
+	}
+
+	# O WebSocket do chat precisa passar sem buffer, ou o streaming
+	# chega todo de uma vez no fim.
+	handle {
+		reverse_proxy 127.0.0.1:8787 {
+			flush_interval -1
+			header_up X-Real-IP {remote_host}
+		}
+	}
+
+	header {
+		-Server
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	}
+
+	# Log no journal, nao em arquivo: a unit do Caddy roda com
+	# ProtectSystem, entao /var/log fica somente leitura para ela.
+	# Para ler:  sudo journalctl -u caddy -f
+	log {
+		format json
+	}
+}

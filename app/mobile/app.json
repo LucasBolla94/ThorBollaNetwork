@@ -1,0 +1,38 @@
+{
+  "expo": {
+    "name": "Thor",
+    "slug": "thor-bollanetwork",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "thor",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#03060b",
+    "splash": {
+      "backgroundColor": "#03060b",
+      "resizeMode": "contain",
+      "image": "./assets/icon.png"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "network.bolla.thor",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "network.bolla.thor",
+      "adaptiveIcon": {
+        "backgroundColor": "#03060b",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": ["expo-secure-store"]
+  }
+}

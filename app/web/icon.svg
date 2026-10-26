@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <radialGradient id="orb" cx="38%" cy="32%" r="78%">
+      <stop offset="0%" stop-color="#cfc6ff" />
+      <stop offset="42%" stop-color="#8b7cf6" />
+      <stop offset="100%" stop-color="#3fb8cc" />
+    </radialGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="60%" stop-color="#8b7cf6" stop-opacity="0.35" />
+      <stop offset="100%" stop-color="#8b7cf6" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="sheen" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.55" />
+      <stop offset="55%" stop-color="#ffffff" stop-opacity="0" />
+    </linearGradient>
+  </defs>
+
+  <rect width="512" height="512" rx="112" fill="#0a0a12" />
+  <circle cx="256" cy="256" r="200" fill="url(#glow)" />
+  <circle cx="256" cy="256" r="118" fill="url(#orb)" />
+  <circle cx="256" cy="256" r="118" fill="url(#sheen)" />
+
+  <!-- aneis -->
+  <circle cx="256" cy="256" r="150" fill="none" stroke="#8b7cf6" stroke-opacity="0.45" stroke-width="3" />
+  <circle cx="256" cy="256" r="178" fill="none" stroke="#4dd4e8" stroke-opacity="0.26" stroke-width="2.5"
+          stroke-dasharray="26 18" />
+
+  <!-- nos da teia -->
+  <g fill="#4dd4e8">
+    <circle cx="256" cy="106" r="9" />
+    <circle cx="386" cy="331" r="9" />
+    <circle cx="126" cy="331" r="9" />
+  </g>
+  <g stroke="#4dd4e8" stroke-opacity="0.3" stroke-width="2.5" fill="none">
+    <path d="M256 106 L386 331 L126 331 Z" />
+  </g>
+</svg>

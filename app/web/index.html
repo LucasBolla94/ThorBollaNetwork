@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0a0a12" />
+    <meta name="description" content="Thor — segundo cerebro pessoal" />
+    <title>Thor</title>
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/icon-180.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Thor" />
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <!-- Brilho de fundo: duas manchas que respiram devagar -->
+    <div class="aurora" aria-hidden="true"><i></i><i></i></div>
+
+    <div id="boot" class="boot">
+      <div class="reator reator-sm" data-reator></div>
+    </div>
+
+    <!-- ================= CRIAR CONTA ================= -->
+    <section id="screen-signup" class="gate" hidden>
+      <div class="card hud-frame"><i class="hud-b1"></i><i class="hud-b2"></i>
+        <div class="gate-head">
+          <div class="reator reator-md" data-reator></div>
+          <h1>Criar sua conta</h1>
+          <p class="muted">Este Thor e de uma pessoa so. A primeira conta e a sua.</p>
+        </div>
+
+        <form id="form-signup" class="stack" autocomplete="off">
+          <label>E-mail
+            <input name="email" type="email" required autocomplete="email" spellcheck="false" />
+          </label>
+          <label>Senha <small class="muted">minimo 12 caracteres</small>
+            <input name="password" type="password" required minlength="12"
+                   autocomplete="new-password" />
+          </label>
+          <label>Repita a senha
+            <input name="password2" type="password" required minlength="12"
+                   autocomplete="new-password" />
+          </label>
+          <button class="primary" type="submit">Criar conta</button>
+          <p class="error" id="signup-error" role="alert"></p>
+        </form>
+      </div>
+    </section>
+
+    <!-- ================= CONFIRME O E-MAIL ================= -->
+    <section id="screen-check" class="gate" hidden>
+      <div class="card hud-frame"><i class="hud-b1"></i><i class="hud-b2"></i>
+        <div class="gate-head">
+          <div class="reator reator-md" data-reator></div>
+          <h1>Confirme seu e-mail</h1>
+          <p class="muted">
+            Mandei uma mensagem para <strong id="check-email" class="convidado"></strong>.
+            Abra o link de la para ativar a conta.
+          </p>
+        </div>
+        <div class="stack">
+          <p class="muted sm">
+            Nao chegou? Olhe o spam — e a primeira vez que este dominio te escreve.
+          </p>
+          <button class="ghost" id="btn-resend">Enviar de novo</button>
+          <button class="ghost" id="btn-back-login">Ja confirmei, quero entrar</button>
+          <p class="error" id="check-msg" role="alert"></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= ENTRAR ================= -->
+    <section id="screen-login" class="gate" hidden>
+      <div class="card hud-frame"><i class="hud-b1"></i><i class="hud-b2"></i>
+        <div class="gate-head">
+          <div class="reator reator-md" data-reator></div>
+          <h1>Thor</h1>
+          <p class="muted">segundo cerebro</p>
+        </div>
+        <form id="form-login" class="stack">
+          <label>E-mail
+            <input name="email" type="email" required autocomplete="email" spellcheck="false" />
+          </label>
+          <label>Senha
+            <input name="password" type="password" required autocomplete="current-password" />
+          </label>
+          <button class="primary" type="submit">Entrar</button>
+          <p class="error" id="login-error" role="alert"></p>
+          <button class="link" id="btn-forgot" type="button">Esqueci minha senha</button>
+        </form>
+      </div>
+    </section>
+
+    <!-- ================= ESQUECI A SENHA ================= -->
+    <section id="screen-forgot" class="gate" hidden>
+      <div class="card hud-frame"><i class="hud-b1"></i><i class="hud-b2"></i>
+        <div class="gate-head">
+          <h1>Esqueci minha senha</h1>
+          <p class="muted">Mando um link para voce escolher uma nova.</p>
+        </div>
+        <form id="form-forgot" class="stack">
+          <label>E-mail
+            <input name="email" type="email" required autocomplete="email" spellcheck="false" />
+          </label>
+          <button class="primary" type="submit">Mandar o link</button>
+          <p class="error" id="forgot-msg" role="alert"></p>
+          <button class="link" id="btn-back-login2" type="button">Voltar</button>
+        </form>
+      </div>
+    </section>
+
+    <!-- ================= NOVA SENHA ================= -->
+    <section id="screen-reset" class="gate" hidden>
+      <div class="card hud-frame"><i class="hud-b1"></i><i class="hud-b2"></i>
+        <div class="gate-head">
+          <h1 id="reset-titulo">Escolha uma senha nova</h1>
+          <p class="muted" id="reset-sub">Depois de salvar, as outras sessoes sao desconectadas.</p>
+        </div>
+        <form id="form-reset" class="stack" autocomplete="off">
+          <label>Senha nova <small class="muted">minimo 12 caracteres</small>
+            <input name="password" type="password" required minlength="12"
+                   autocomplete="new-password" />
+          </label>
+          <label>Repita a senha
+            <input name="password2" type="password" required minlength="12"
+                   autocomplete="new-password" />
+          </label>
+          <button class="primary" type="submit" id="reset-acao">Salvar e entrar</button>
+          <p class="error" id="reset-error" role="alert"></p>
+        </form>
+      </div>
+    </section>
+
+
+    <!-- ================= APLICACAO ================= -->
+    <main id="screen-app" class="app" hidden>
+      <aside class="rail" id="rail">
+        <header class="rail-head">
+          <div class="brand">
+            <div class="reator reator-sm" data-reator></div>
+            <strong>Thor</strong>
+          </div>
+          <button class="icon" id="btn-new" title="Conversa nova" aria-label="Conversa nova">+</button>
+        </header>
+
+        <div class="rail-search">
+          <input id="search" type="search" placeholder="Buscar na memoria..." />
+        </div>
+
+        <nav class="conv-list" id="conv-list" aria-label="Conversas"></nav>
+
+        <footer class="rail-foot">
+          <button class="ghost" id="btn-teia">Teia de pensamento</button>
+          <button class="ghost" id="btn-soul">Alma</button>
+          <button class="ghost" id="btn-config">Configuracao</button>
+          <button class="ghost" id="btn-logout">Sair</button>
+        </footer>
+      </aside>
+
+      <section class="chat">
+        <header class="chat-head">
+          <button class="icon only-mobile" id="btn-rail" aria-label="Menu">☰</button>
+          <h2 id="chat-title">Conversa nova</h2>
+          <span class="pill" id="model-pill"></span>
+        </header>
+
+        <div class="stream" id="stream">
+          <div class="empty" id="empty">
+            <div class="rede-fundo" id="rede-fundo" aria-hidden="true"></div>
+
+            <div class="instrumento">
+              <div class="reator reator-lg" data-reator></div>
+              <div class="estado-linha"><i></i><span id="estado-txt">em espera</span></div>
+              <div class="leituras">
+                <div><b id="ler-mem">0</b><span>memoria</span></div>
+                <div><b id="ler-cache">--</b><span>cache</span></div>
+                <div><b id="ler-conv">0</b><span>conversas</span></div>
+                <div><b id="ler-voltas">0</b><span>buscas</span></div>
+              </div>
+            </div>
+
+            <h3>sistema pronto</h3>
+            <p class="muted">
+              Eu lembro do que a gente conversa. O que ficar guardado aparece na
+              <button class="link" id="link-teia">teia de pensamento</button>.
+            </p>
+            <div class="suggestions" id="suggestions">
+              <button>Como esta o servidor agora?</button>
+              <button>Me explique o que voce lembra de mim</button>
+              <button>Quais decisoes ja tomamos no projeto Thor?</button>
+            </div>
+          </div>
+        </div>
+
+        <form class="composer" id="composer">
+          <div class="composer-box hud-frame"><i class="hud-b1"></i><i class="hud-b2"></i>
+            <textarea id="input" rows="1" placeholder="Fala comigo..." autocomplete="off"></textarea>
+            <button class="send" id="btn-send" type="submit" aria-label="Enviar">
+              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                <path d="M3 20.5 21 12 3 3.5l4 8.5-4 8.5Z" fill="currentColor" />
+              </svg>
+            </button>
+            <button class="send stop" id="btn-stop" type="button" hidden aria-label="Parar">
+              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                <rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" />
+              </svg>
+            </button>
+          </div>
+          <p class="hint" id="conn-hint"></p>
+        </form>
+      </section>
+
+      <!-- Painel da teia -->
+      <aside class="panel" id="panel-teia" hidden>
+        <header class="panel-head">
+          <h3>Teia de pensamento</h3>
+          <button class="icon" data-close="panel-teia" aria-label="Fechar">✕</button>
+        </header>
+        <div class="panel-stats" id="teia-stats"></div>
+        <div class="rede-host" id="rede-teia" role="img" aria-label="Rede de memoria do Thor"></div>
+        <div class="panel-body" id="teia-list"></div>
+        <footer class="panel-foot">
+          <form id="form-thought" class="row">
+            <input name="content" placeholder="Ensinar algo ao Thor..." required />
+            <select name="kind">
+              <option value="fato">fato</option>
+              <option value="preferencia">preferencia</option>
+              <option value="projeto">projeto</option>
+              <option value="pessoa">pessoa</option>
+              <option value="decisao">decisao</option>
+            </select>
+            <button class="primary sm" type="submit">Guardar</button>
+          </form>
+        </footer>
+      </aside>
+
+      <!-- Painel de configuracao -->
+      <aside class="panel" id="panel-config" hidden>
+        <header class="panel-head">
+          <h3>Configuracao</h3>
+          <button class="icon" data-close="panel-config" aria-label="Fechar">✕</button>
+        </header>
+        <div class="panel-body">
+          <label>De onde vem a inteligencia
+            <div class="seg" id="cfg-provider" role="radiogroup">
+              <button type="button" data-p="openrouter" role="radio">OpenRouter</button>
+              <button type="button" data-p="anthropic" role="radio">Anthropic</button>
+            </div>
+          </label>
+          <p class="muted sm" id="cfg-provider-state"></p>
+
+          <label style="margin-top:16px">Chave do OpenRouter
+            <input id="cfg-key-openrouter" type="password" placeholder="sk-or-v1-..."
+                   autocomplete="off" spellcheck="false" />
+          </label>
+          <label style="margin-top:10px">Chave da Anthropic
+            <input id="cfg-key-anthropic" type="password" placeholder="sk-ant-..."
+                   autocomplete="off" spellcheck="false" />
+          </label>
+
+          <label style="margin-top:16px">Modelo <small class="muted" id="cfg-model-for"></small>
+            <input id="cfg-model" list="model-list" spellcheck="false" autocomplete="off" />
+          </label>
+          <datalist id="model-list"></datalist>
+          <p class="muted sm" id="cfg-model-state"></p>
+
+          <p class="muted sm" style="margin-top:18px">
+            As chaves ficam no banco do servidor e nunca voltam inteiras para o navegador.
+            Cada provedor guarda a sua chave e o seu modelo — trocar de um para o outro
+            nao apaga nada.
+          </p>
+        </div>
+        <footer class="panel-foot row">
+          <button class="primary sm" id="btn-config-save">Salvar</button>
+          <span class="ok" id="cfg-ok"></span>
+        </footer>
+      </aside>
+
+      <!-- Painel da alma -->
+      <aside class="panel" id="panel-soul" hidden>
+        <header class="panel-head">
+          <h3>Alma</h3>
+          <button class="icon" data-close="panel-soul" aria-label="Fechar">✕</button>
+        </header>
+        <div class="panel-body">
+          <p class="muted sm">
+            Isto define quem o Thor e. Vale para toda conversa nova.
+          </p>
+          <textarea id="soul-text" rows="18" spellcheck="false"></textarea>
+        </div>
+        <footer class="panel-foot row">
+          <button class="primary sm" id="btn-soul-save">Salvar</button>
+          <button class="ghost sm" id="btn-soul-reset">Restaurar padrao</button>
+          <span class="ok" id="soul-ok"></span>
+        </footer>
+      </aside>
+    </main>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>

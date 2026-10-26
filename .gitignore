@@ -1,0 +1,41 @@
+# Dependencias — reinstalaveis a partir do package-lock.
+node_modules/
+.expo/
+dist/
+web-build/
+*.tsbuildinfo
+
+# Repositorios de terceiros guardados so para consulta. Nao sao nossos, pesam
+# centenas de megabytes, e versionar codigo alheio dentro do nosso confunde
+# quem for procurar o historico de uma mudanca.
+reference/
+
+# Segredos. Hoje nenhum deles mora aqui — todos ficam no servidor, fora do
+# projeto. Estao listados assim mesmo porque a hora em que um aparece e
+# justamente a hora em que ninguem lembra de conferir.
+.env
+.env.*
+*.pem
+*.key
+.runpod-key
+SETUP.txt
+*.credentials.json
+google-services.json
+GoogleService-Info.plist
+
+# Gravacoes da voz do Lucas.
+#
+# Isto nao e tamanho, e risco: com poucos segundos de audio limpo da voz de
+# alguem da para clonar essa voz. Num repositorio publico seria material
+# pronto para golpe de telefone. Se um dia for para versionar, que seja uma
+# decisao tomada de olhos abertos, em repositorio privado, e nao o efeito
+# colateral de um "git add ."
+amostras-voz/
+voz/corpus/
+voz/*.wav
+voz/*.mp3
+
+# Sistema
+.DS_Store
+Thumbs.db
+*.log

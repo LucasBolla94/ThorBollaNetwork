@@ -1,0 +1,16 @@
+# O projeto e escrito no Windows e roda no Linux.
+#
+# Sem isto o git converte as quebras de linha dos scripts para CRLF ao gravar
+# no disco, e um .sh com CRLF no servidor falha com "bad interpreter: No such
+# file or directory" — erro que aponta para o interpretador quando o problema
+# e o caractere invisivel no fim da primeira linha.
+*.sh        text eol=lf
+*.service   text eol=lf
+Caddyfile   text eol=lf
+*.py        text eol=lf
+
+# Audio e binario: nunca deixar o git mexer no conteudo.
+*.mp3       binary
+*.wav       binary
+*.png       binary
+*.jpg       binary

@@ -1,0 +1,54 @@
+[Unit]
+Description=Luk — segundo cerebro pessoal
+Documentation=https://bolla.network
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=luk
+Group=luk
+WorkingDirectory=/opt/luk/server
+Environment=NODE_ENV=production
+EnvironmentFile=/opt/luk/.env
+ExecStart=/usr/local/bin/node src/index.ts
+Restart=always
+RestartSec=3
+
+# Reinicia sozinho, mas desiste se estiver em laco de falha: sem isso um erro
+# de configuracao vira reinicio infinito que entope o journal.
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=luk
+
+# --- Isolamento -----------------------------------------------------------
+# O servico so precisa escrever em /opt/luk/data. Todo o resto do disco fica
+# somente leitura para ele, entao uma falha na aplicacao nao vira dano no
+# sistema.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=false
+ReadWritePaths=/opt/luk/data
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

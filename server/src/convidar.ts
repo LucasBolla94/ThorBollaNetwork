@@ -1,7 +1,7 @@
 /**
  * Convida alguem para o Thor e manda o e-mail.
  *
- *   sudo -u luk LUK_ROOT=/opt/luk /usr/local/bin/node src/convidar.ts <email> [nivel]
+ *   sudo -u thor THOR_ROOT=/opt/thor/repo /usr/local/bin/node src/convidar.ts <email> [nivel]
  *
  * Roda fora do servidor web porque e assim que a primeira conta nasce: enquanto
  * nao existe dono, nao ha quem possa se autenticar para convidar. Quem tem SSH

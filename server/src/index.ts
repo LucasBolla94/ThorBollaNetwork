@@ -688,7 +688,7 @@ const SHELL_TOOL: Tool = {
     'Roda um comando no servidor dedicated-1 (Ubuntu) e devolve a saida. Use para ' +
     'responder sobre o estado da maquina: servicos, logs, disco, memoria, processos, ' +
     'rede, conteudo de arquivo. ' +
-    'Consulta roda na hora. Comando que GRAVA arquivo dentro de /opt/luk/data ou /tmp ' +
+    'Consulta roda na hora. Comando que GRAVA arquivo dentro de /opt/thor/data ou /tmp ' +
     'tambem funciona, mas para e pede autorizacao ao Lucas primeiro — voce espera a ' +
     'resposta dele. Fora disso nao passa: apagar coisa de outro lugar, reiniciar servico, ' +
     'instalar pacote, mandar dados para fora. Se o comando for recusado, a resposta diz o ' +

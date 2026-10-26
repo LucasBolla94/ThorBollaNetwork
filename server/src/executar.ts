@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { config } from './config.ts';
 import { db, newId, now } from './db.ts';
 import { pedir } from './aprovacao.ts';
 
@@ -36,7 +37,7 @@ import { pedir } from './aprovacao.ts';
 // ele. Fica fora.
 //
 // Isto roda como o usuario `luk`, que a unit do systemd prende: so
-// /opt/luk/data e gravavel, sem sudo, sem novas permissoes. A lista aqui e a
+// /opt/thor/data e gravavel, sem sudo, sem novas permissoes. A lista aqui e a
 // segunda camada, nao a unica.
 // ===========================================================================
 
@@ -126,10 +127,10 @@ const CORRESPONDENCIA_QUEBRADA: [RegExp, string][] = [
  * Isto ja foi uma lista de expressoes soltas sobre a linha inteira, e errava
  * dos dois lados:
  *
- *   - `\benv\b` casava dentro de `/opt/luk/.env` e `\bsh\b` dentro de `x.sh`.
+ *   - `\benv\b` casava dentro de `/opt/thor/.env` e `\bsh\b` dentro de `x.sh`.
  *     O veredito saia certo, porque eram caminhos proibidos de qualquer jeito,
  *     mas pela regra errada — e a mensagem e o que o Thor repete ao Lucas.
- *     "cat /opt/luk/.env" recusado com "esse programa executa outro" nao
+ *     "cat /opt/thor/.env" recusado com "esse programa executa outro" nao
  *     explica nada e manda quem investigar para o lugar errado.
  *   - `ps aux | grep node` era recusado como "interpretador". A palavra estava
  *     ali como texto de busca, nao como programa. Consulta legitima barrada.
@@ -174,7 +175,7 @@ const CAMINHOS_PROIBIDOS = [
  * Onde escrever e aprovavel.
  *
  * Nao e uma escolha nossa: a unit do systemd ja define `ReadWritePaths` com
- * /opt/luk/data, e o resto do sistema esta em somente-leitura para este
+ * /opt/thor/data, e o resto do sistema esta em somente-leitura para este
  * processo. A lista aqui repete o que o sistema ja garante, para o Thor receber
  * uma recusa que explica em vez de um "permission denied" cru.
  *
@@ -184,7 +185,7 @@ const CAMINHOS_PROIBIDOS = [
  * encenacao. Para o Thor reiniciar servico de verdade falta uma regra de
  * sudoers para unidades especificas — decisao separada, que nao tomo sozinho.
  */
-const CAMINHOS_GRAVAVEIS = ['/opt/luk/data/', '/tmp/'];
+const CAMINHOS_GRAVAVEIS = [`${config.dataDir.replace(/\/*$/, '')}/`, '/tmp/'];
 
 export type Veredito =
   | { nivel: 'livre' }

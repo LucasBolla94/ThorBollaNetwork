@@ -45,7 +45,7 @@ export type Mail = { to: string; subject: string; text: string; html?: string };
 export async function sendMail(mail: Mail): Promise<void> {
   if (!mailReady()) {
     throw new Error(
-      'E-mail nao configurado. Faltam SMTP_HOST, SMTP_USER e SMTP_PASS no /opt/luk/.env.',
+      'E-mail nao configurado. Faltam SMTP_HOST, SMTP_USER e SMTP_PASS no /opt/thor/.env.',
     );
   }
   const c = cfg();

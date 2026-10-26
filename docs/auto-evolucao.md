@@ -5,6 +5,9 @@ nasce de uma conversa, e a memória se revisa com o tempo.
 
 Pensado como **produto**: qualquer pessoa instala, e ele se monta para ela.
 
+**Construido.** O que esta escrito aqui e o que esta rodando; o diario tem o
+relato da execucao e os erros que os testes acharam.
+
 ---
 
 ## 1. O que a pesquisa diz

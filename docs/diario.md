@@ -1025,3 +1025,98 @@ Avisou sem eu perguntar.
 
 Os três só apareceram porque o teste conversa de verdade, em vez de testar as
 peças separadas.
+
+---
+
+## Sessão 36 — ele se monta e se corrige sozinho
+
+**O pedido:** parar de configurar na mão. Ele tem que aprender, refletir,
+melhorar — e ser produto que outra pessoa possa instalar.
+
+### O que a pesquisa mudou no desenho
+
+Quatro achados, e um deles mudou tudo:
+
+**Autocrítica solta não funciona.** Pedir a um modelo "reflita sobre a sua
+memória" produz texto bonito e mudança nenhuma. O que funciona é crítica
+**ancorada em evidência** — números medidos, pares concretos. E o ganho está na
+primeira passada; insistir não melhora.
+
+Então a reflexão não recebe a memória inteira e uma pergunta vaga. Recebe os
+pares mais parecidos entre si, o que nunca foi usado, as contagens. E devolve
+operações, não opinião.
+
+Os outros três: memória se recupera por **três sinais** (relevância,
+importância, recência) e não por um; reflexão vira **memória nova** que volta
+pro mesmo acervo; e entrevista boa é **uma pergunta por vez**, sem divagar.
+
+### A personalidade virou duas camadas
+
+| | onde | de quem |
+|---|---|---|
+| **base** | no repositório | o produto: como ele trabalha |
+| **perfil** | na pasta de dados | de quem instalou |
+
+A base não tem mais o seu nome dentro. O nome do agente vem da configuração —
+quem instalar chama do que quiser.
+
+**A garantia que importa:** depois que você editar o perfil, nada automático o
+reescreve. Guardo a marca do texto que eu escrevi; se o arquivo não bate, foi
+você quem mexeu, e a partir daí é intocável.
+
+### A entrevista
+
+Cinco perguntas, uma por vez, e o **servidor** conduz — não o modelo. A pesquisa
+insiste em uma pergunta por vez e em não divagar, e isso código garante e
+modelo não. O modelo entra uma vez só, no fim, pra escrever o perfil.
+
+Sua instalação está esperando por ela. Quando você abrir o site, a primeira
+pergunta já está lá:
+
+> Antes de começarmos, preciso te conhecer um pouco — são cinco perguntas
+> rápidas e depois nunca mais. Como devo te chamar?
+
+### O que ele faz sozinho agora
+
+**Decide o que é essencial por uso, não por regra minha.** Antes era uma lista
+de tipos que eu escrevi. Agora cada memória conta usos, e o núcleo é
+reordenado por uma nota que soma tipo, uso e frescor — com o uso vencendo o
+tipo. O que **você** fixar na mão nunca é derrubado.
+
+**Calibra o limiar da busca pelo próprio acervo.** Era 0,3 porque eu medi uma
+vez com cinco frases inventadas. Agora ele sorteia pares do que tem guardado:
+quase todo par sorteado é sem relação, então essa distribuição mostra o que
+"sem relação" parece ali.
+
+**Revisa a própria memória.** Junta o repetido, resolve contradição, tira do
+núcleo o que não serve, e — a parte que o faz evoluir — transforma várias
+observações num entendimento novo.
+
+### O que ele não alcança, de propósito
+
+Separação que não é detalhe: **aprendizado** ele ajusta; **limite de segurança**
+não. A lista de comandos, o tempo de uma autorização, o que nunca roda — nada
+disso está ao alcance da reflexão. E tem teste provando que ele não consegue
+reescrever o próprio código.
+
+Um agente que afrouxa a própria trava aprendendo não é evoluído, é problema
+esperando acontecer.
+
+### Erros que os testes acharem
+
+- O tipo `Thought` não trazia importância nem usos: quem lia via tudo como
+  igual, **sem erro nenhum aparecer**.
+- A barra pra "duas memórias dizem a mesma coisa" era 0,55 fixo. Medido, duas
+  frases equivalentes ficam perto de 0,40 — a reflexão rodava e nunca via par
+  nenhum.
+- Um import colidiu com uma variável local do mesmo nome e derrubava um teste
+  ao carregar. O `verificar.sh` não via; agora vê.
+
+### Medido
+
+| suite | conferências |
+|---|---|
+| memória | 50 |
+| evolução | 71 |
+| comandos e aprovação | todas |
+| ponta a ponta | até onde dá sem você |

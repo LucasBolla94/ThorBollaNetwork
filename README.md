@@ -127,6 +127,25 @@ Quatro gavetas, da mais quente para a mais fria:
 | **conversa** | cresce; o meio vira resumo ao encher | sim |
 | **arquivo** | o resto, por busca | não |
 
+### Ele se monta e se corrige sozinho
+
+Na primeira conversa ele faz **cinco perguntas** e escreve o proprio perfil a
+partir das respostas. Depois que voce editar esse perfil, nada automatico o
+reescreve.
+
+Com o tempo ele **reordena o que sabe de cor pelo uso**, calibra o limiar da
+busca pelo proprio acervo, e revisa a memoria: junta o repetido, resolve
+contradicao, e transforma varias observacoes num entendimento novo.
+
+Nada e apagado — memoria corrigida fica registrada como superada. E a revisao
+**nao alcanca o que o limita**: a lista de comandos, o tempo de uma
+autorizacao, o proprio codigo. Um agente que afrouxa a propria trava
+aprendendo nao e evoluido.
+
+Detalhe em [docs/auto-evolucao.md](docs/auto-evolucao.md).
+
+### A busca
+
 A busca acha **por palavra e por sentido**: "não gosto de listas" encontra
 "odeia receber várias opções". O sentido vem de um serviço de embed que roda no
 próprio servidor, sem placa de vídeo. Se ele cair, a busca por palavra

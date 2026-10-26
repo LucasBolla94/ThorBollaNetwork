@@ -1693,7 +1693,7 @@ mensagem de usuario, com o id casando.
 ## 25. Cadastro por convite — feito em 2026-10-25
 
 Antes, criar a conta exigia copiar um token do servidor por SSH. Agora chega um link por
-e-mail. Convite emitido e entregue para `lucasbolla@icloud.com`.
+e-mail. Convite emitido e entregue para `<e-mail do dono>`.
 
 ### 25.1 Como funciona
 
@@ -3193,3 +3193,94 @@ pedido nasce.
 | D121 | O acesso de qualquer lugar e o site instalado na tela de inicio — ja estava pronto, faltava instalar |
 | D122 | A versao do cache do service worker e derivada do conteudo, nao escrita na mao |
 | D123 | Alvo de toque minimo de 44px e campo de 16px no celular, por `pointer: coarse` e nao so por largura |
+
+---
+
+## 38. O app nativo, e o que "segundo plano" quer dizer no iOS
+
+### 38.1 A correcao que motivou esta secao
+
+A §37 trocou o pedido por outra coisa: o Lucas pediu o app Expo online, e eu
+entreguei polimento do site. Ele apontou, e estava certo. O registro fica aqui
+porque o erro nao foi tecnico, foi de obediencia — substituir o que foi pedido
+pela minha leitura do que seria melhor.
+
+A razao dada tambem estava pela metade. Eu apresentei duas saidas (TestFlight
+ou Expo Go) como se fossem as unicas. Hospedar atualizacao propria e abrir no
+Expo Go realmente nao serve mais — "legacy manifests" deixaram de ser aceitos
+no SDK 51, e a mudanca de maio de 2026 restringiu o carregamento no Expo Go a
+projetos do proprio dono, com pacote em JavaScript puro. Mas exportar para web
+e servir do proprio servidor era possivel e eu nao disse.
+
+Nada disso importou no fim: o Lucas quer **app nativo**, porque precisa do que
+so app faz. E a resposta certa, e o motivo esta logo abaixo.
+
+### 38.2 Nao existe app rodando em segundo plano no iOS
+
+Esta e a parte que muda o desenho, e que quase todo mundo descobre tarde:
+
+> **A Apple suspende o app pouco depois de voce sair dele. Nenhuma configuracao
+> muda isso.**
+
+O que existe de verdade:
+
+| mecanismo | quando roda | serve para |
+|---|---|---|
+| **push** | o servidor empurra, o sistema entrega na hora | avisar. E imediato |
+| tarefa em segundo plano | o iOS decide: 15 minutos ou 6 horas | sincronizar |
+| audio / localizacao / VoIP | so com uso legitimo da funcao | outra coisa |
+
+Um pedido de aprovacao vence em 120 segundos. **Nenhuma janela de tarefa em
+segundo plano e pontual o bastante para isso.** Entao o aviso e push, e a
+tarefa de fundo fica como rede de seguranca: se um push se perder, na proxima
+janela que o iOS der o app confere se ficou pedido em aberto.
+
+### 38.3 Como o aviso chega
+
+O servidor empurra pelo servico do Expo em vez de falar direto com a Apple. A
+diferenca pratica: **a chave da APNs fica guardada no EAS e nao neste
+servidor** — um lugar a menos de onde ela pode vazar.
+
+O corpo do aviso leva **o comando cru**, nao a justificativa do modelo. Mesma
+regra do cartao (§35.3): quem decide tem de ver o que vai rodar, e a tela de
+bloqueio e onde a tentacao de so bater o olho e maior.
+
+O disparo mora em `index.ts`, escutando `aoMudar`, e nao dentro de
+`aprovacao.ts`. O registro de aprovacoes anuncia o que aconteceu; quem se
+importa, escuta. Se amanha o aviso tambem for por e-mail, entra outro ouvinte e
+`aprovacao.ts` continua igual.
+
+Token que a Apple recusa com `DeviceNotRegistered` e apagado na hora: aparelho
+apagado ou app desinstalado nunca melhora sozinho, e guardar para sempre
+significa tentar e falhar em toda aprovacao futura.
+
+### 38.4 O que trava, e nao sou eu
+
+O codigo esta pronto e a configuracao nativa foi validada: bundle
+`network.bolla.thor`, modos de segundo plano `remote-notification`, `fetch` e
+`processing`, os tres plugins aplicados. O que falta nao e codigo:
+
+| o que | custo | para que |
+|---|---|---|
+| conta Apple Developer | **US$ 99/ano** | qualquer app num iPhone de verdade |
+| conta Expo | gratis | `eas init`, que da identidade de push ao app |
+
+**Nao ha contorno para a conta da Apple.** Instalar app em iPhone fisico exige
+provisionamento assinado, e provisionamento exige conta paga. A unica excecao e
+compilar pelo Xcode num Mac, com certificado que vence em 7 dias — o que nao
+resolve uso diario e exige um Mac, que nao temos.
+
+### 38.5 O que ainda nao foi testado
+
+Push nao pode ser testado sem aparelho de verdade e sem as duas contas. Entao,
+honestamente: o caminho esta escrito e conferido ate onde da, e **a primeira
+prova real so acontece com o telefone na mao**.
+
+| # | Decisao |
+|---|---|
+| D124 | Aviso de aprovacao e **push**, nao tarefa em segundo plano: 120 segundos nao cabem numa janela que o iOS agenda quando quer |
+| D125 | A tarefa em segundo plano fica como rede de seguranca para push perdido, e isso esta dito no codigo para ninguem confundir os papeis |
+| D126 | O push sai pelo servico do Expo, para a chave da APNs nao morar neste servidor |
+| D127 | O corpo do aviso leva o comando cru, nunca a justificativa do modelo |
+| D128 | O disparo escuta `aoMudar` de fora; `aprovacao.ts` nao sabe que push existe |
+| D129 | Token recusado com `DeviceNotRegistered` e apagado na hora |

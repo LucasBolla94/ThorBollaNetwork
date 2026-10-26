@@ -1,3 +1,6 @@
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
 import fastifyStatic from '@fastify/static';
@@ -67,6 +70,7 @@ import { sendMail, mailReady } from './mail.ts';
 import { confirmacao, recuperacao } from './emails.ts';
 import { executar, historico } from './executar.ts';
 import { aoMudar, decidir, pendentes, cancelarPendentes, historicoAprovacoes } from './aprovacao.ts';
+import { aparelhos, avisarAprovacao, registrarAparelho } from './push.ts';
 
 const app = Fastify({
   logger: { level: process.env.LOG_LEVEL ?? 'info' },
@@ -76,6 +80,47 @@ const app = Fastify({
 
 await app.register(cookie);
 await app.register(websocket, { options: { maxPayload: 1_048_576 } });
+/**
+ * O service worker, com a versao do cache calculada aqui.
+ *
+ * Antes a versao era escrita na mao no arquivo, e numa troca de nome ela nao
+ * foi trocada junto — o telefone de quem tinha o site instalado ficou com a
+ * casca antiga. A correcao seguinte foi o `install.sh` reescrever o arquivo no
+ * deploy, e isso passou a ser um problema proprio: com o deploy por `git`, um
+ * script que edita arquivo versionado suja a arvore e o `git pull` seguinte
+ * para em conflito.
+ *
+ * Calcular na hora de servir resolve os dois. A versao e o resumo do que a
+ * casca realmente contem: nao ha passo para esquecer, nem arquivo para sujar.
+ */
+const versaoDaCasca = (): string => {
+  const soma = createHash('sha256');
+  for (const arquivo of ['app.js', 'app.css', 'index.html']) {
+    try {
+      soma.update(readFileSync(resolve(config.webDir, arquivo)));
+    } catch {
+      /* arquivo ausente entra no resumo como ausencia, e tudo bem */
+    }
+  }
+  return `thor-${soma.digest('hex').slice(0, 12)}`;
+};
+
+let cascaEmCache: { versao: string; corpo: string } | null = null;
+
+app.get('/sw.js', async (_req, reply) => {
+  if (!cascaEmCache) {
+    const versao = versaoDaCasca();
+    const fonte = readFileSync(resolve(config.webDir, 'sw.js'), 'utf8');
+    cascaEmCache = { versao, corpo: fonte.replace('__VERSAO__', versao) };
+  }
+  return reply
+    .type('application/javascript; charset=utf-8')
+    // O proprio service worker nunca pode vir do cache: e ele que decide o
+    // que fica em cache, e uma copia velha dele se perpetua sozinha.
+    .header('Cache-Control', 'no-cache, no-store, must-revalidate')
+    .send(cascaEmCache.corpo);
+});
+
 await app.register(fastifyStatic, { root: config.webDir, index: ['index.html'] });
 
 // Cabecalhos de seguranca. A CSP e restritiva de proposito: nada de script
@@ -468,6 +513,37 @@ app.get('/api/ws-ticket', async (req: any, reply) => {
     ? cabecalho.slice(7).trim()
     : req.cookies?.[SESSION_COOKIE];
   return { ticket: criarTiquete(token) };
+});
+
+/** O app registra o aparelho para receber aviso de aprovacao. */
+app.post('/api/aparelhos', async (req: any, reply) => {
+  const s = requireSession(req, reply);
+  if (!s) return;
+  const token = String(req.body?.token ?? '').trim();
+  if (!token.startsWith('ExponentPushToken') && !token.startsWith('ExpoPushToken')) {
+    return reply.code(400).send({ error: 'token de push invalido' });
+  }
+  registrarAparelho(
+    s.userId,
+    token,
+    String(req.body?.plataforma ?? 'desconhecida'),
+    req.body?.nome ? String(req.body.nome).slice(0, 80) : null,
+  );
+  return { ok: true };
+});
+
+app.get('/api/aparelhos', async (req: any, reply) => {
+  if (!requireSession(req, reply)) return;
+  // O token nao volta: serve para empurrar aviso, nao para a tela mostrar.
+  return { aparelhos: aparelhos().map(({ id, plataforma, nome }) => ({ id, plataforma, nome })) };
+});
+
+// O aviso no celular e disparado aqui, e nao dentro de aprovacao.ts, para o
+// registro de aprovacoes nao precisar saber que push existe. Ele anuncia o que
+// aconteceu; quem se importa, escuta. Se amanha o aviso tambem for por e-mail,
+// entra outro ouvinte e aprovacao.ts continua igual.
+aoMudar((p) => {
+  if (p.estado === 'pendente') void avisarAprovacao(p.id, p.comando);
 });
 
 app.get('/api/search', async (req: any, reply) => {

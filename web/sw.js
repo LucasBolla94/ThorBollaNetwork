@@ -10,7 +10,7 @@
 //   - trocar VERSION limpa todo cache antigo e assume o controle na hora
 // =========================================================================
 
-const VERSION = 'thor-v4';
+const VERSION = '__VERSAO__';
 const SHELL = [
   '/',
   '/index.html',

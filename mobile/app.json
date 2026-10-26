@@ -17,11 +17,13 @@
       "supportsTablet": true,
       "bundleIdentifier": "network.bolla.thor",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "UIBackgroundModes": ["remote-notification", "fetch", "processing"]
       }
     },
     "android": {
       "package": "network.bolla.thor",
+      "permissions": ["RECEIVE_BOOT_COMPLETED", "WAKE_LOCK", "POST_NOTIFICATIONS"],
       "adaptiveIcon": {
         "backgroundColor": "#03060b",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -33,6 +35,21 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "plugins": ["expo-secure-store"]
+    "plugins": [
+      "expo-secure-store",
+      "expo-background-task",
+      [
+        "expo-notifications",
+        {
+          "color": "#ffb347",
+          "defaultChannel": "aprovacoes"
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "PREENCHER_COM_EAS_INIT"
+      }
+    }
   }
 }

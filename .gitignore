@@ -39,3 +39,12 @@ voz/*.mp3
 .DS_Store
 Thumbs.db
 *.log
+
+# Gerados no deploy a partir de icon.svg. Uma fonte de verdade, e nada que
+# suje a arvore quando o servidor faz `git reset --hard`.
+web/icon-*.png
+
+# Projetos nativos gerados pelo prebuild: saem de app.json, nao o contrario.
+mobile/ios/
+mobile/android/
+mobile/.claude/

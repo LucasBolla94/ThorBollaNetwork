@@ -155,6 +155,22 @@ CREATE TABLE IF NOT EXISTS aprovacoes (
 );
 CREATE INDEX IF NOT EXISTS idx_aprov_data ON aprovacoes(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_aprov_pend ON aprovacoes(estado, expira_em);
+
+-- Aparelhos que recebem aviso de aprovacao.
+--
+-- O token do push e a chave: ele identifica o aparelho, e o mesmo telefone
+-- reinstalando o app gera token novo. Por isso a limpeza nao e por tempo, e
+-- sim por falha de entrega — quando a Apple responde que o aparelho nao existe
+-- mais, a linha sai.
+CREATE TABLE IF NOT EXISTS aparelhos (
+  id         TEXT PRIMARY KEY,
+  user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token      TEXT NOT NULL UNIQUE,
+  plataforma TEXT NOT NULL,
+  nome       TEXT,
+  created_at INTEGER NOT NULL,
+  last_seen  INTEGER NOT NULL
+);
 `);
 
 // Gatilhos que mantem os indices de busca em dia. Sem eles o FTS vira

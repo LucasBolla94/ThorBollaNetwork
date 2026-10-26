@@ -37,8 +37,28 @@ function loadEnvFile(path: string): void {
   }
 }
 
-const ROOT = process.env.LUK_ROOT ?? resolve(import.meta.dirname, '../..');
-loadEnvFile(process.env.LUK_ENV ?? resolve(ROOT, '.env'));
+/**
+ * Le a variavel com o prefixo novo, aceitando o antigo.
+ *
+ * O agente mudou de nome e as variaveis acompanham, mas um servidor com `.env`
+ * escrito antes da troca nao pode deixar de subir por causa disso. O fallback
+ * sai quando nao houver mais `.env` antigo em lugar nenhum — e ate la ele e a
+ * diferenca entre uma migracao e uma madrugada perdida.
+ */
+const env = (nome: string): string | undefined =>
+  process.env[`THOR_${nome}`] ?? process.env[`LUK_${nome}`];
+
+const ROOT = env('ROOT') ?? resolve(import.meta.dirname, '../..');
+loadEnvFile(env('ENV') ?? resolve(ROOT, '.env'));
+
+/**
+ * Onde ficam os dados.
+ *
+ * Fica **fora** do diretorio do codigo de proposito: o deploy agora e
+ * `git reset --hard`, que apaga o que nao esta versionado. Banco dentro do
+ * repositorio seria banco apagado no primeiro deploy.
+ */
+const DADOS = env('DATA') ?? resolve(ROOT, 'data');
 
 function required(key: string): string {
   const v = process.env[key];
@@ -54,8 +74,9 @@ export const config = {
   root: ROOT,
   port: Number(process.env.PORT ?? 8787),
   host: process.env.HOST ?? '127.0.0.1',
-  webDir: process.env.LUK_WEB_DIR ?? resolve(ROOT, 'web'),
-  dbPath: process.env.LUK_DB ?? resolve(ROOT, 'data/luk.db'),
+  webDir: env('WEB_DIR') ?? resolve(ROOT, 'web'),
+  dataDir: DADOS,
+  dbPath: env('DB') ?? resolve(DADOS, 'thor.db'),
 
   // Segredo usado para assinar/derivar tokens de sessao.
   sessionSecret: required('SESSION_SECRET'),

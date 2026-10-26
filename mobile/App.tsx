@@ -3,6 +3,8 @@ import { SafeAreaView, StatusBar, StyleSheet, View } from 'react-native';
 import { Conversa } from './src/Conversa';
 import { Entrada } from './src/Entrada';
 import { Reator } from './src/Reator';
+import { limparContador, registrarParaAvisos } from './src/avisos';
+import { ligarTarefaDeFundo } from './src/tarefaFundo';
 import { esquecerToken, sessaoValida } from './src/servidor';
 import { cor } from './src/tema';
 
@@ -26,6 +28,26 @@ export default function App() {
     };
   }, []);
 
+  // Depois de entrar, o aparelho se apresenta ao servidor para receber aviso.
+  // Falhar aqui nao impede de usar o app: o cartao na tela continua valendo,
+  // o que se perde e ser avisado com a tela fechada. Por isso o motivo fica
+  // guardado e aparece nos ajustes, em vez de virar um alerta no meio do uso.
+  const [avisos, setAvisos] = useState<string>('');
+  useEffect(() => {
+    if (porta !== 'dentro') return;
+    let vivo = true;
+    (async () => {
+      const r = await registrarParaAvisos();
+      if (!vivo) return;
+      setAvisos(r.ok ? '' : r.motivo);
+      if (r.ok) await ligarTarefaDeFundo();
+      await limparContador();
+    })();
+    return () => {
+      vivo = false;
+    };
+  }, [porta]);
+
   const sair = async () => {
     await esquecerToken();
     setPorta('fora');
@@ -40,7 +62,7 @@ export default function App() {
         </View>
       )}
       {porta === 'fora' && <Entrada aoEntrar={() => setPorta('dentro')} />}
-      {porta === 'dentro' && <Conversa aoSair={sair} />}
+      {porta === 'dentro' && <Conversa aoSair={sair} aviso={avisos} />}
     </SafeAreaView>
   );
 }

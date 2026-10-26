@@ -51,7 +51,7 @@ const limpar = (s: string): string =>
     .replace(/<(lembrar|corrigir)[^>]*>[\s\S]*$/g, '')
     .replace(/<\/?(lembrar|corrigir)[^>]*$/g, '');
 
-export function Conversa({ aoSair }: { aoSair: () => void }) {
+export function Conversa({ aoSair, aviso = '' }: { aoSair: () => void; aviso?: string }) {
   const [itens, setItens] = useState<Item[]>([]);
   const [estado, setEstado] = useState<Estado>('dormindo');
   const [pulso, setPulso] = useState(0);
@@ -254,6 +254,14 @@ export function Conversa({ aoSair }: { aoSair: () => void }) {
         </Pressable>
       </View>
 
+      {/* Avisos desligados nao impedem de usar o app, mas mudam o que ele
+          promete: sem push, um pedido pode vencer sem voce saber. Fica dito. */}
+      {!!aviso && (
+        <Text style={s.semAviso} numberOfLines={2}>
+          sem aviso no celular — {aviso}
+        </Text>
+      )}
+
       <ScrollView
         ref={rolagem}
         style={{ flex: 1 }}
@@ -347,6 +355,15 @@ const s = StyleSheet.create({
     borderBottomColor: cor.linhaFraca,
   },
   titulo: { fontFamily: mono, fontSize: 15, letterSpacing: 4.5, color: cor.texto },
+  semAviso: {
+    ...rotulo,
+    color: cor.ambar,
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,179,71,0.2)',
+    backgroundColor: 'rgba(255,179,71,0.06)',
+  },
   fluxo: { padding: 16, paddingBottom: 24, flexGrow: 1 },
   vazio: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 60 },
   balao: { marginVertical: 9 },

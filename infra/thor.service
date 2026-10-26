@@ -1,16 +1,18 @@
 [Unit]
-Description=Luk — segundo cerebro pessoal
+Description=Thor — segundo cerebro pessoal
 Documentation=https://bolla.network
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-User=luk
-Group=luk
-WorkingDirectory=/opt/luk/server
+User=thor
+Group=thor
+WorkingDirectory=/opt/thor/repo/server
 Environment=NODE_ENV=production
-EnvironmentFile=/opt/luk/.env
+Environment=THOR_ROOT=/opt/thor/repo
+Environment=THOR_DATA=/opt/thor/data
+EnvironmentFile=/opt/thor/.env
 ExecStart=/usr/local/bin/node src/index.ts
 Restart=always
 RestartSec=3
@@ -22,12 +24,15 @@ StartLimitBurst=5
 
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=luk
+SyslogIdentifier=thor
 
 # --- Isolamento -----------------------------------------------------------
-# O servico so precisa escrever em /opt/luk/data. Todo o resto do disco fica
-# somente leitura para ele, entao uma falha na aplicacao nao vira dano no
-# sistema.
+# O servico so precisa escrever em /opt/thor/data. Todo o resto do disco fica
+# somente leitura para ele — inclusive o proprio codigo em /opt/thor/repo, que
+# e atualizado pelo deploy e nunca pela aplicacao.
+#
+# Isto nao e so boa pratica: e a camada que sustenta a lista de comandos do
+# executar.ts. A lista erra; o isolamento nao deixa o erro virar estrago.
 NoNewPrivileges=true
 PrivateTmp=true
 PrivateDevices=true
@@ -43,7 +48,7 @@ RestrictRealtime=true
 RestrictNamespaces=true
 LockPersonality=true
 MemoryDenyWriteExecute=false
-ReadWritePaths=/opt/luk/data
+ReadWritePaths=/opt/thor/data
 CapabilityBoundingSet=
 AmbientCapabilities=
 SystemCallFilter=@system-service

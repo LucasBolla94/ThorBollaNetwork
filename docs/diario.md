@@ -407,7 +407,7 @@ A linha de voz (RunPod, treino de voz própria) está **em espera** — ver [pla
 - O marcador de cache cai no mesmo lugar lógico nos dois — a correção do §22 vale igual.
 
 ### 2026-10-25 — Sessão 13: cadastro por convite
-- **Convite enviado para `lucasbolla@icloud.com`.** Login na IONOS conferido antes de enviar.
+- **Convite enviado para `<e-mail do dono>`.** Login na IONOS conferido antes de enviar.
   Vale 24h e uma vez só. Detalhe em [plan.md §25](plan.md).
 - Criar conta não precisa mais de SSH: chega um link por e-mail, a página reconhece o convite
   e mostra o e-mail convidado em vez de pedir token.
@@ -429,7 +429,7 @@ A linha de voz (RunPod, treino de voz própria) está **em espera** — ver [pla
   abre. Não há rota pública de login para martelar senha nem de cadastro para criar conta.
 - Conta criada por `admin/generate_link` — cria o usuário e devolve o link **sem enviar**,
   então o e-mail sai pelo nosso remetente e o cadastro do GoTrue fica desligado.
-- **Só `lucasbolla@icloud.com` pode criar conta** (`LUK_OWNER_EMAIL`).
+- **Só `<e-mail do dono>` pode criar conta** (`LUK_OWNER_EMAIL`).
 - **Perdemos o segundo fator**, e isso está dito no plano. Foi pedido assim por enquanto; o
   GoTrue tem MFA pronto para religar depois.
 - **A conta antiga `Lucas` foi removida:** 2FA nunca concluído, zero conversas e zero
@@ -455,7 +455,7 @@ A linha de voz (RunPod, treino de voz própria) está **em espera** — ver [pla
   com prova de pixel de que as duas animações estão vivas. Demo desmontada depois.
 
 ### 2026-10-25 — Sessão 16: convite enviado, marca BollaNetwork
-- **Convite enviado para `lucasbolla@icloud.com` como dono.** O login na IONOS foi conferido
+- **Convite enviado para `<e-mail do dono>` como dono.** O login na IONOS foi conferido
   antes de criar o convite. Detalhe em [plan.md §28](plan.md).
 - **BollaNetwork virou a marca dos e-mails**; o Thor continua sendo o nome do produto.
 - Os três e-mails (convite, confirmação, recuperação) passaram a usar **uma moldura só**, com

@@ -3,7 +3,7 @@
 # Sobe uma instancia de demonstracao do Luk, com conta pronta e memoria
 # semeada, para conferir o visual sem tocar na instalacao real.
 #
-#   ssh dedicated-1 'bash /opt/luk/server/demo.sh'       # no servidor
+#   ssh dedicated-1 'bash /opt/thor/repo/server/demo.sh'       # no servidor
 #   ssh -f -N -L 8788:127.0.0.1:8788 dedicated-1         # tunel, daqui
 #   depois abra http://localhost:8788
 #
@@ -57,13 +57,13 @@ apagar_usuario
 rm -f /tmp/demo.db /tmp/demo.db-wal /tmp/demo.db-shm /tmp/demo.log
 
 # .env proprio: sem gate de dono e sem e-mail de verdade saindo
-sudo cp /opt/luk/.env /tmp/demo.env
+sudo cp /opt/thor/.env /tmp/demo.env
 sudo chown "$USER" /tmp/demo.env
 chmod 600 /tmp/demo.env
 sed -i "s|^SMTP_HOST=.*|SMTP_HOST=smtp.invalido.localdomain|" /tmp/demo.env
 sed -i "s|^LUK_OWNER_EMAIL=.*|LUK_OWNER_EMAIL=|" /tmp/demo.env
 
-cd /opt/luk/server
+cd /opt/thor/repo/server
 LUK_ENV=/tmp/demo.env LUK_DB=/tmp/demo.db PORT=$PORTA SECURE_COOKIES=false \
   nohup /usr/local/bin/node src/index.ts > /tmp/demo.log 2>&1 &
 sleep 4

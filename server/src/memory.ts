@@ -219,6 +219,21 @@ export function stats() {
 const RE_REMEMBER = /<lembrar(?:\s+tipo=["']?([a-zA-Zçã]+)["']?)?\s*>([\s\S]*?)<\/lembrar>/gi;
 const RE_CORRECT = /<corrigir\s+id=["']?([0-9a-fA-F-]{8,})["']?\s*>([\s\S]*?)<\/corrigir>/gi;
 
+/**
+ * Tira as marcas do texto, sem guardar nada.
+ *
+ * Existe separado de `extractAndStore` por causa da ordem no banco: a mensagem
+ * precisa ser gravada ANTES dos pensamentos, que apontam para ela. Entao o
+ * texto limpo e necessario antes de a extracao rodar.
+ */
+export function limparMarcas(raw: string): string {
+  return raw
+    .replace(RE_CORRECT, '')
+    .replace(RE_REMEMBER, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 export type Extracted = { clean: string; saved: Thought[] };
 
 export function extractAndStore(raw: string, sourceMessageId: string | null): Extracted {
@@ -233,11 +248,7 @@ export function extractAndStore(raw: string, sourceMessageId: string | null): Ex
     if (t) saved.push(t);
   }
 
-  const clean = raw
-    .replace(RE_CORRECT, '')
-    .replace(RE_REMEMBER, '')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
+  const clean = limparMarcas(raw);
 
   // Pensamentos nascidos do mesmo turno ficam ligados entre si: e a origem
   // comum, nao coincidencia de palavra.

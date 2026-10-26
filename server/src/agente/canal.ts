@@ -10,7 +10,7 @@ import {
   type ToolCall,
   type Usage,
 } from '../llm.ts';
-import { extractAndStore, stats } from '../memory.ts';
+import { extractAndStore, limparMarcas, stats } from '../memory.ts';
 import { aoMudar, cancelarPendentes, decidir, pendentes } from '../aprovacao.ts';
 import {
   MEMORY_TOOL,
@@ -175,12 +175,23 @@ export async function canal(app: FastifyInstance): Promise<void> {
             );
           }
 
+          // A mensagem entra ANTES dos pensamentos que apontam para ela.
+          //
+          // Cada pensamento guarda de qual mensagem nasceu, e o banco cobra
+          // essa referencia. Na ordem inversa, o pensamento nascia apontando
+          // para uma mensagem que ainda nao existia e o turno inteiro morria
+          // com "FOREIGN KEY constraint failed".
+          //
+          // O erro estava aqui desde sempre e nunca aparecia: a memoria nunca
+          // chegava a guardar nada, entao o caminho nao era percorrido. Fazer
+          // a memoria funcionar foi o que o revelou.
           const assistantId = newId();
-          const { clean, saved } = extractAndStore(full, assistantId);
+          const semMarcas = limparMarcas(full);
           db.prepare(
             `INSERT INTO messages (id, conversation_id, role, content, model, created_at)
              VALUES (?, ?, ?, ?, ?, ?)`,
-          ).run(assistantId, conversationId, 'assistant', clean, activeModel(), now());
+          ).run(assistantId, conversationId, 'assistant', semMarcas, activeModel(), now());
+          const { clean, saved } = extractAndStore(full, assistantId);
           db.prepare(`UPDATE conversations SET updated_at = ? WHERE id = ?`).run(
             now(),
             conversationId,

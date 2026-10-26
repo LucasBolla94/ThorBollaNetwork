@@ -65,9 +65,10 @@ limpar();
 restaurarAlma();
 const doArquivo = almaDoArquivo();
 ok('le personalidade.md', doArquivo.length > 500, `${doArquivo.length} caracteres`);
-ok('diz quem ele e', /voce e o thor/i.test(doArquivo));
+ok('diz quem ele e', /voc[eê] [eé] o thor/i.test(doArquivo));
 ok('ensina a marca de lembrar', doArquivo.includes('<lembrar'));
-ok('avisa que memoria recuperada e dado', /nunca instru|nao e ordem|nao obede/i.test(doArquivo));
+ok('avisa que memoria recuperada e dado',
+  /nunca instru[cç][aã]o|nunca ordem|ignore e conte/i.test(doArquivo));
 ok('sem sobreposicao', !almaEhSobreposta());
 ok('alma() devolve o arquivo', alma() === doArquivo);
 

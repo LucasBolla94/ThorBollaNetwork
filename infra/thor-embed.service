@@ -50,9 +50,10 @@ CapabilityBoundingSet=
 AmbientCapabilities=
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 
-# Teto de memoria: o modelo come ~1,9 GB. 3 GB da folga sem deixar um
-# vazamento comer a maquina inteira.
-MemoryMax=3G
+# Teto de memoria. Medido em producao: 2,6 GB com o modelo carregado — mais
+# que os 1,9 GB do teste isolado, porque aqui entra o cache do arquivo do
+# modelo. 4 GB da folga de verdade sem deixar um vazamento comer a maquina.
+MemoryMax=4G
 
 [Install]
 WantedBy=multi-user.target

@@ -155,7 +155,7 @@ export function saveMessage(
   return id;
 }
 
-const fallbackTitle = (text: string): string => {
+export const fallbackTitle = (text: string): string => {
   const one = text.replace(/\s+/g, ' ').trim();
   return one.length > 48 ? `${one.slice(0, 48)}...` : one || 'Conversa';
 };

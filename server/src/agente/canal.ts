@@ -4,7 +4,15 @@ import { SESSION_COOKIE, readSession, trocarTiquete } from '../auth.ts';
 import { activeModel, hasKey, streamChat, LlmError, type ToolCall, type Usage } from '../llm.ts';
 import { extractAndStore, stats } from '../memory.ts';
 import { aoMudar, cancelarPendentes, decidir, pendentes } from '../aprovacao.ts';
-import { MEMORY_TOOL, SHELL_TOOL, buildPrompt, improveTitle, runTool, saveMessage } from './conversa.ts';
+import {
+  MEMORY_TOOL,
+  SHELL_TOOL,
+  buildPrompt,
+  fallbackTitle,
+  improveTitle,
+  runTool,
+  saveMessage,
+} from './conversa.ts';
 import { colher } from './colheita.ts';
 import { talvezComprimir } from './compressao.ts';
 

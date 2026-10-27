@@ -1120,3 +1120,66 @@ esperando acontecer.
 | evolução | 71 |
 | comandos e aprovação | todas |
 | ponta a ponta | até onde dá sem você |
+
+---
+
+## A voz: quatro paredes e o que elas custaram
+
+A voz do Thor foi treinada numa placa alugada (RunPod, RTX A5000), partindo de
+um checkpoint pt-BR pronto — 6.159 épocas de outra pessoa falando — e somando
+1.000 épocas com os 18,8 minutos que o dono gravou.
+
+**O preço informado não é o preço.** A API anunciava US$ 0,16/hora para a
+A5000. O pod criado cobra **US$ 0,27/hora**. O número da API era o piso do
+mercado, não o da máquina que entrou. Quem for orçar, orce pelo que o pod
+devolve em `costPerHr`, não pelo catálogo.
+
+Quatro problemas travaram o treino antes da primeira época. Nenhum deu
+mensagem que apontasse para a causa — por isso ficam escritos:
+
+**1. O checkpoint guarda caminhos de arquivo.** O torch atual se recusa a
+carregar isso com a trava de segurança fechada. A saída fácil
+(`weights_only=False`) executa o pickle de um arquivo baixado da internet, e
+isso não se faz. A saída certa foi autorizar **só** `PosixPath` — tipo da
+biblioteca padrão, que guarda texto e nada mais. Está em `voz/treinar.py`.
+
+**2. O mesmo checkpoint traz um parâmetro que não existe mais.** O treinador
+recusa começar por causa de um `sample_bytes` de outra versão. A primeira
+tentativa de limpar tirou demais e quebrou de outro jeito: o treinador quer
+retomar o estado do otimizador e não achou. A dose certa é cirúrgica — saem
+apenas os dois dicionários de hiperparâmetros. Está em `voz/limpar-ajustes.py`.
+
+**3. O pacote do Piper vem incompleto para treino.** Falta a extensão
+compilada `monotonic_align` e falta até o `core.pyx` de onde compilar. O erro
+só aparece depois de baixar 800 MB e montar o treino inteiro. Precisa dos três
+passos: buscar o fonte no repositório, compilar, e copiar o `.so` para um
+subdiretório aninhado específico. Dois dos três deixam o erro igual.
+
+**4. `scp` do Windows leva CRLF.** O bash lê `set -euo pipefail\r` e recusa com
+*"pipefail: invalid option name"* — mensagem que não fala nada de fim de linha.
+O `.gitattributes` força LF no que o git grava, mas um `scp` da cópia de
+trabalho passa por fora. Por isso `voz/enviar-ao-pod.sh` copia do clone do
+servidor **e** tira CR de qualquer jeito.
+
+### O que o número de qualidade diz
+
+O treino reporta `val_mos`, uma estimativa automática de qualidade da voz.
+Começou em 2,4–2,7 e subiu para **3,3–3,5**, onde parou de subir e passou a
+oscilar. Voz muito boa fica perto de 4.
+
+Parar de subir e começar a oscilar significa que ele extraiu o que havia para
+extrair. **Mais épocas não melhoram daqui — mais gravação, sim.** 18,8 minutos
+é pouco: o recomendado para ajuste fino fica perto de 1.300 frases, e foram
+300. Se a voz sair mediana, o remédio é gravar mais, não alugar placa melhor.
+
+### Cuidados com o dinheiro, escritos nos scripts
+
+- `gpuTypePriority: "custom"` em cada pedido. O padrão `"availability"` é o
+  mesmo que dizer "me dá qualquer uma" — e qualquer uma pode custar oito vezes
+  mais.
+- Teto de US$ 0,40/hora: nenhuma tentativa acima disso, aconteça o que
+  acontecer.
+- `voz/custo.py` diz quanto já se gastou, lendo a chave do arquivo — nunca da
+  linha de comando, onde apareceria em `ps` e no histórico.
+- **Encerrar o pod apaga o volume.** O que não descer antes, se perde. O
+  `treinar-no-pod.sh` termina imprimindo o que precisa ser baixado.

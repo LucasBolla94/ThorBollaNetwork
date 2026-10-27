@@ -1214,3 +1214,133 @@ precisa de placa alugada para falar, só para treinar.
 As frases de teste são acentuadas de propósito: texto sem acento muda a sílaba
 tônica e some com a nasalização. Foi o que estragou a primeira rodada de
 testes da voz clonada, e a lição vale igual aqui.
+
+---
+
+## Falar e ouvir: o que a medição derrubou
+
+O pedido era simples de dizer: conversar com ele por voz, em português, como
+uma conversa de verdade. Metade saiu como planejado. A outra metade bateu num
+muro que nenhum plano previa.
+
+### Falar: funcionou melhor que o esperado
+
+A voz treinada roda no servidor a **10× tempo real**, sem placa de vídeo. Isso
+muda a arquitetura para melhor: falar deixa de ter custo mensal.
+
+O jeito óbvio seria esperar a resposta inteira e então falar — e isso põe uns
+três segundos de silêncio no meio de cada turno. Então a fala sai em pedaços,
+cortados onde a voz naturalmente pausaria.
+
+**O primeiro pedaço é tratado diferente dos outros, de propósito.** É ele que
+define a demora que a pessoa sente; os seguintes já tocam enquanto ele fala e
+ninguém percebe. Então o primeiro para no **primeiro** corte válido, e os
+demais pegam o **último** disponível — trecho mais longo tem entoação melhor,
+e menos pedaços significa menos chance de a fila secar.
+
+Medido com uma resposta real, chegando no ritmo de uma LLM:
+
+| | |
+|---|---|
+| da primeira letra ao primeiro som | **172 ms** |
+| buracos no meio da fala | **nenhum** |
+| sintetizar | 9,9× mais rápido que falar |
+
+Ele começa a falar **2,6 segundos antes** de a resposta terminar de ser
+escrita.
+
+### Ouvir: o muro
+
+A medição usou as 300 frases que o dono gravou — a voz dele, o português
+dele, e o texto certo de cada uma como gabarito:
+
+| modelo | velocidade | erro | por frase |
+|---|---|---|---|
+| small | 0,6× tempo real | 10% | 5,6 s |
+| medium | 0,2× | 6% | 17,0 s |
+| large-v3-turbo | 0,1× | 6% | 27,5 s |
+| base | 2,0× | 19% | 1,7 s |
+| tiny | 4,0× | 24% | 0,8 s |
+
+**0,6× quer dizer mais devagar do que a fala acontece.** Uma frase de quatro
+segundos custa 5,6 para ser entendida.
+
+Antes de desistir do local, três hipóteses, e as três valiam o teste:
+
+**1. A quantização pode estar errada para este processador.** Falso. float32
+saiu pior (0,55×) e int16 pior ainda (0,40×). Não é ajuste, é a máquina: um
+Xeon de 2013, com AVX e **sem AVX2**, que é a instrução de que o motor do
+Whisper mais depende.
+
+**2. O custo pode ser por chamada, não por segundo.** Verdade, e é o achado
+que explica tudo: 3,2 s de áudio custam 5,60 s; 27 s de áudio custam 8,27 s.
+Ou seja **~5,2 s fixos mais 0,11 s por segundo de fala**. O Whisper sempre
+processa uma janela de 30 segundos, completando com silêncio o que falta — e
+conversa é feita exatamente de frases curtas, que pagam o preço inteiro.
+
+**3. Modelo menor pode trocar velocidade por erro aceitável.** Não. `base`
+erra uma palavra em cinco; numa conversa isso faz ele responder a outra
+pergunta.
+
+### O que se fez com isso
+
+Três caminhos para ouvir, e ele escolhe:
+
+**Pelo navegador** (sem chave, funciona hoje). De graça e instantâneo. Depende
+do navegador — Chrome e Safari sim, Firefox não — exige a aba na frente, e não
+vai existir no app nativo.
+
+**Pela nuvem** (US$ 0,04 por hora de fala). Rápido em qualquer navegador e no
+app futuro. Precisa de uma chave.
+
+**Aqui dentro** (nada sai da máquina). Os 5,6 segundos por frase. Fica como a
+linha a mexer se o processador um dia trocar por um com AVX2.
+
+**Sobre o que sai da máquina.** Sai a gravação do que ele falou. O texto dessa
+mesma conversa já vai para a LLM na nuvem de qualquer forma — então o conteúdo
+já saía; o que passa a sair é o áudio. O que **nunca** sai é o modelo da voz
+dele, que é o que permitiria clonagem: falar continua 100% no servidor.
+
+### Decisões que o código explica por dentro
+
+**Detectar fala mora no servidor, não no navegador.** Quem decide o fim do
+turno precisa ouvir o silêncio; se o navegador manda só a fala, o fim do turno
+vira um aviso do cliente — mais uma coisa para desalinhar. Custa 32 KB/s,
+menos que uma ligação telefônica, e 0,39 ms de processador por quadro de 32 ms.
+
+**Ouvir e falar são independentes.** Quando o navegador faz a escuta, o
+servidor não recebe áudio nenhum mas continua tendo de falar. Com um sinal só
+para as duas coisas, esse caminho seria impossível: ou tudo, ou nada.
+
+**Marca de memória nunca vira som.** O modelo escreve `<lembrar>` no meio da
+resposta, e isso é removido antes da tela. Mas a fala acontece **enquanto** ele
+escreve, e nesse instante a marca pode estar aberta — sairia "menor que
+lembrar maior que", e isso não se desfaz. A lista de marcas passou a viver só
+em `memory.ts`: duas cópias virariam uma marca nova falada em voz alta, sem
+erro nenhum aparecer.
+
+**Guarda 320 ms de áudio antes de reconhecer a fala.** O detector precisa de
+alguns quadros para ter certeza, e sem essa folga a primeira sílaba se perde —
+some o "não" de "não quero", que inverte a frase. A prova foi transcrever o
+que o serviço guardou: quatro frases voltaram palavra por palavra, incluindo
+uma que começa com "Não".
+
+### Erros que os testes acharam
+
+- O corte da fala pegava sempre o **último** ponto disponível. Certo para os
+  pedaços seguintes, errado para o primeiro — que é o que define a demora.
+- Um decimal pela metade (`3.` um instante antes de virar `3.5`) sairia falado
+  como "três ponto" e "cinco", em frases separadas.
+- Remover uma marca deixava espaços duplos, que viram pausa estranha na fala.
+- **Dois erros eram meus, nos próprios testes:** media o corte do áudio contra
+  a duração do *arquivo*, quando toda gravação tem silêncio nas pontas que o
+  serviço corta de propósito; e a conta de buraco na fila esquecia de somar a
+  duração do primeiro pedaço, acusando um buraco de 548 ms que não existia.
+
+### Medido
+
+| suite | conferências |
+|---|---|
+| voz (corte e marcas) | 34 |
+| serviço de voz, com áudio real | 15 |
+| conversa ao vivo | 6 |

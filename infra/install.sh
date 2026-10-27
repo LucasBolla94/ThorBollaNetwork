@@ -108,6 +108,43 @@ else
   echo "   sem python3; a busca por sentido fica desligada"
 fi
 
+log "servico de voz (ouvir e falar)"
+# Ambiente separado do embed de proposito. O de voz carrega torch, que pesa
+# uns 2 GB; misturar os dois faria um `pip install` de qualquer um deles poder
+# quebrar o outro por conflito de versao — e perder a busca por sentido porque
+# a voz atualizou uma biblioteca seria um estrago grande por um ganho nenhum.
+VOZVENV=$RAIZ/data/voz-venv
+if [[ ! -x $VOZVENV/bin/python ]] && command -v python3 >/dev/null 2>&1; then
+  python3 -m venv "$VOZVENV" 2>/dev/null || {
+    apt-get install -y -qq python3-venv >/dev/null 2>&1
+    python3 -m venv "$VOZVENV"
+  }
+fi
+if [[ -x $VOZVENV/bin/python ]]; then
+  "$VOZVENV/bin/pip" install -q --upgrade pip >/dev/null 2>&1 || true
+  # torch na versao de CPU, da indice proprio: a padrao arrasta ~2,5 GB de
+  # bibliotecas de CUDA que nunca vao rodar nesta maquina sem placa.
+  "$VOZVENV/bin/pip" install -q torch --index-url https://download.pytorch.org/whl/cpu \
+    >/dev/null 2>&1 || true
+  if "$VOZVENV/bin/pip" install -q faster-whisper silero-vad piper-tts >/dev/null 2>&1; then
+    echo "   escuta e fala prontas"
+  else
+    echo "   AVISO: as bibliotecas de voz nao instalaram; ele fica so no texto"
+  fi
+  mkdir -p "$RAIZ/data/voz"
+else
+  echo "   sem python3; a voz fica desligada"
+fi
+
+# A voz treinada nao vem no repositorio (e publico, e voz gravada permite
+# clonagem). Entao: se ja existe em data/voz, fica; se nao, ele ouve e
+# responde por texto, sem falar.
+if [[ -f $RAIZ/data/voz/voz.onnx ]]; then
+  echo "   voz do dono presente ($(du -h "$RAIZ/data/voz/voz.onnx" | cut -f1))"
+else
+  echo "   sem voz do dono em $RAIZ/data/voz/voz.onnx — ele ouve, mas nao fala"
+fi
+
 log "icones do PWA"
 if command -v rsvg-convert >/dev/null 2>&1; then
   for tamanho in 180 192 512; do
@@ -149,6 +186,15 @@ if [[ -x $RAIZ/data/embed-venv/bin/python ]]; then
   systemctl enable thor-embed.service >/dev/null 2>&1
   systemctl restart thor-embed.service
   echo "   thor-embed iniciado (a primeira vez baixa ~1 GB de modelo)"
+fi
+
+# A voz, pela mesma regra: se nao subir, o Thor sobe igual e fica no texto.
+if [[ -x $RAIZ/data/voz-venv/bin/python ]]; then
+  install -m 644 "$REPO/infra/thor-voz.service" /etc/systemd/system/thor-voz.service
+  systemctl daemon-reload
+  systemctl enable thor-voz.service >/dev/null 2>&1
+  systemctl restart thor-voz.service
+  echo "   thor-voz iniciado (a primeira vez baixa o modelo de escuta)"
 fi
 
 systemctl enable thor.service >/dev/null 2>&1

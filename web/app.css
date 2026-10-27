@@ -1362,6 +1362,38 @@ body.thinking .composer-box {
 .send.stop { border-color: var(--danger); color: var(--danger); background: rgba(242, 96, 122, 0.1); }
 .hint { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase; }
 
+/* --------------------------------------------------------------------- voz
+ *
+ * O microfone precisa dizer tres coisas sem texto: desligado, ouvindo voce, e
+ * falando com voce. Quem conversa olha a tela de longe (ou nao olha), entao a
+ * diferenca tem de ser de cor e movimento, nao de rotulo.
+ *
+ * O pulso so acontece ouvindo. Animar tambem enquanto ele fala deixaria a tela
+ * inquieta sem acrescentar informacao — a voz ja diz que ele esta falando. */
+.send.mic { background: rgba(34, 211, 238, 0.08); }
+.send.mic[aria-pressed='true'] {
+  border-color: var(--hud);
+  background: rgba(34, 211, 238, 0.3);
+  box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.35), 0 0 14px rgba(34, 211, 238, 0.25);
+}
+body.voz-ouvindo .send.mic[aria-pressed='true'] { animation: micPulso 1.9s ease-in-out infinite; }
+body.voz-falando .send.mic[aria-pressed='true'] {
+  border-color: var(--accent);
+  color: var(--accent);
+  animation: none;
+}
+.voz-hint { color: var(--hud); }
+
+@keyframes micPulso {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.35), 0 0 10px rgba(34, 211, 238, 0.2); }
+  50% { box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.6), 0 0 22px rgba(34, 211, 238, 0.45); }
+}
+
+/* Quem pediu menos animacao nao quer um botao piscando sem parar. */
+@media (prefers-reduced-motion: reduce) {
+  body.voz-ouvindo .send.mic[aria-pressed='true'] { animation: none; }
+}
+
 .tool-note {
   font-family: var(--mono);
   font-size: 10.5px;

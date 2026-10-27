@@ -4,6 +4,7 @@
 
 import { criarReator } from './hud.js';
 import { criarRede } from './neural.js';
+import { criarVoz } from './voz.js';
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => [...document.querySelectorAll(sel)];
@@ -15,6 +16,11 @@ const state = {
   streaming: false,
   ws: null,
   retry: 0,
+  // voz: `pode` vem do servidor (o servico esta no ar?), `ligada` e a escolha
+  // dele no botao do microfone.
+  vozPode: false,
+  vozFala: false,
+  vozLigada: false,
 };
 
 // ------------------------------------------------------------------ utils
@@ -418,9 +424,93 @@ $('#stream')?.addEventListener('scroll', () => {
 
 // -------------------------------------------------------------- websocket
 
+// -------------------------------------------------------------------- voz
+
+const voz = criarVoz({
+  // Cada pedaco do microfone vai como quadro BINARIO. E so por isso que o
+  // servidor sabe separar microfone de comando: mesma conexao, dois formatos.
+  aoPedaco: (pcm) => {
+    if (state.vozLigada && state.ws?.readyState === 1) state.ws.send(pcm);
+  },
+  aoEstado: (nome, extra) => dizerDaVoz(nome, extra),
+});
+
+const RECADOS_DA_VOZ = {
+  ouvindo: 'Pode falar.',
+  parado: 'Pode falar.',
+  falando: '',
+  desligada: '',
+  negado: 'O navegador nao liberou o microfone. Procure o icone de microfone na barra de endereco.',
+};
+
+function dizerDaVoz(nome, extra) {
+  const dica = $('#voz-hint');
+  if (!dica) return;
+  const texto =
+    nome === 'erro'
+      ? `Nao consegui abrir o microfone${extra?.erro ? `: ${extra.erro}` : '.'}`
+      : (RECADOS_DA_VOZ[nome] ?? '');
+  dica.textContent = texto;
+  dica.hidden = !texto;
+  document.body.classList.toggle('voz-falando', nome === 'falando');
+  document.body.classList.toggle('voz-ouvindo', nome === 'ouvindo' || nome === 'parado');
+  if (nome === 'negado' || nome === 'erro') desligarVoz();
+}
+
+function mostrarBotaoDaVoz() {
+  const b = $('#btn-mic');
+  if (b) b.hidden = !state.vozPode;
+}
+
+async function ligarVoz() {
+  state.queriaVoz = true;
+  if (!state.vozPode || state.vozLigada) return;
+  // A ordem importa: pede o microfone ANTES de avisar o servidor. Se a pessoa
+  // recusar a permissao, o servidor nunca cria uma sessao de escuta que
+  // ficaria esperando audio que nunca vem.
+  if (!(await voz.ligar())) return;
+  state.vozLigada = true;
+  $('#btn-mic')?.setAttribute('aria-pressed', 'true');
+  state.ws?.send(JSON.stringify({ t: 'voz', ligado: true }));
+}
+
+/**
+ * Desliga o microfone.
+ *
+ * `porVontade` separa dois casos que parecem iguais e nao sao: ele apertou o
+ * botao (nao quer mais voz), ou a conexao caiu (ainda quer, e e para voltar
+ * sozinho quando reconectar). Sem essa distincao, perder o sinal no celular
+ * obrigaria a apertar o botao de novo a cada tunel.
+ */
+function desligarVoz(porVontade = true) {
+  if (porVontade) state.queriaVoz = false;
+  if (!state.vozLigada) return;
+  state.vozLigada = false;
+  $('#btn-mic')?.setAttribute('aria-pressed', 'false');
+  void voz.desligar();
+  if (state.ws?.readyState === 1) state.ws.send(JSON.stringify({ t: 'voz', ligado: false }));
+}
+
+/**
+ * Um quadro de audio da fala dele.
+ *
+ * O cabecalho vem dentro do proprio quadro (tipo, sequencia, taxa) em vez de
+ * num JSON mandado antes. Assim um quadro perdido ou fora de ordem nao
+ * desalinha a fila de audio inteira.
+ */
+function aoQuadroBinario(buf) {
+  if (buf.byteLength < 11) return;
+  const cabeca = new DataView(buf, 0, 9);
+  if (cabeca.getUint8(0) !== 1) return;
+  voz.tocar(buf.slice(9), cabeca.getUint32(5, true));
+}
+
 function connect() {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
   const ws = new WebSocket(`${proto}//${location.host}/ws`);
+  // Sem isto o audio chegaria como Blob, que so se le de forma assincrona —
+  // e audio que espera para ser lido e audio que atrasa.
+  ws.binaryType = 'arraybuffer';
   state.ws = ws;
 
   let bubble = null;
@@ -445,8 +535,45 @@ function connect() {
   });
 
   ws.addEventListener('message', (ev) => {
+    if (ev.data instanceof ArrayBuffer) return aoQuadroBinario(ev.data);
     const m = JSON.parse(ev.data);
     switch (m.t) {
+      case 'voz':
+        // Chega duas vezes com sentidos diferentes: logo apos conectar, dizendo
+        // se o servico esta no ar; e como confirmacao de ligar ou desligar.
+        if (typeof m.disponivel === 'boolean') {
+          state.vozPode = m.disponivel;
+          state.vozFala = m.fala === true;
+          mostrarBotaoDaVoz();
+          // Reconectou e ele ainda queria conversar falando: volta sozinho.
+          if (state.queriaVoz && !state.vozLigada) void ligarVoz();
+        }
+        if (m.ligado === false) dizerDaVoz('desligada');
+        break;
+      case 'ouvindo':
+        dizerDaVoz(m.falando ? 'falando' : 'ouvindo');
+        break;
+      case 'ouvi':
+        // O que ele falou entra como mensagem dele na tela, igual ao digitado.
+        addMessage('user', m.texto);
+        state.streaming = true;
+        pinned = true;
+        tele.voltas = 0;
+        mostrarTelemetria();
+        nucleoEstado('pensando');
+        document.body.classList.add('thinking');
+        $('#btn-send').hidden = true;
+        $('#btn-stop').hidden = false;
+        scrollDown(true);
+        break;
+      case 'calar':
+        // Ele falou por cima: cala na hora. Esperar o audio na fila terminar
+        // faria o Thor continuar falando depois de ser interrompido.
+        voz.pararDeTocar();
+        break;
+      case 'falou':
+        dizerDaVoz(state.vozLigada ? 'ouvindo' : 'desligada');
+        break;
       case 'ready':
         state.model = m.model;
         $('#model-pill').textContent = m.hasLlm ? m.model : 'sem chave de IA';
@@ -510,6 +637,9 @@ function connect() {
 
   ws.addEventListener('close', (ev) => {
     finish();
+    // A sessao de escuta vive na conexao: caiu a conexao, caiu a escuta. Mas a
+    // vontade dele continua, e por isso nao e "por vontade".
+    desligarVoz(false);
     if (ev.code === 4401) {
       location.reload();
       return;
@@ -566,6 +696,11 @@ function wireComposer() {
       e.preventDefault();
       $('#composer').requestSubmit();
     }
+  });
+
+  $('#btn-mic')?.addEventListener('click', () => {
+    if (state.vozLigada) desligarVoz();
+    else void ligarVoz();
   });
 
   $('#btn-stop').addEventListener('click', () => {

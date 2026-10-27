@@ -30,9 +30,28 @@ import {
   responder,
   totalDePerguntas,
 } from './entrevista.ts';
+import {
+  descartarEscuta,
+  falar,
+  fecharEscuta,
+  limiteSeguro,
+  ouvir,
+  pedacoFalavel,
+  quadroDeAudio,
+  sabeFalar,
+  semMarcas,
+  taxaDaFala,
+  vozDisponivel,
+} from '../voz.ts';
 
 // O chat por WebSocket: recebe a mensagem, roda o laco do agente e vai
 // mandando o texto conforme ele sai.
+//
+// Pela mesma conexao passa a conversa falada. O audio do microfone chega como
+// quadro BINARIO e a resposta falada volta como quadro binario; o resto segue
+// sendo JSON. Uma conexao so, e nao duas, porque a autorizacao, o "parar" e a
+// conversa em curso ja vivem aqui — abrir um segundo canal duplicaria os tres
+// e criaria o problema de manter os dois de acordo.
 
 export async function canal(app: FastifyInstance): Promise<void> {
   app.register(async (scope) => {
@@ -65,15 +84,44 @@ export async function canal(app: FastifyInstance): Promise<void> {
       // Quem entra no meio de um pedido em aberto precisa ve-lo.
       for (const p of pendentes()) send({ t: 'aprovacao', pedido: p });
 
-      socket.on('message', async (raw: Buffer) => {
-        let msg: any;
-        try {
-          msg = JSON.parse(raw.toString());
-        } catch {
-          return send({ t: 'error', message: 'mensagem invalida' });
+      // --- a conversa falada ----------------------------------------------
+      //
+      // Uma sessao de escuta por conexao. O nome junta a sessao de login com o
+      // relogio porque o Lucas pode ter o site aberto no celular e no
+      // computador ao mesmo tempo: com o nome igual, o audio das duas abas
+      // cairia na mesma fila e as frases se intercalariam.
+      const sessaoVoz = `${session.id}-${Date.now().toString(36)}`;
+      let vozLigada = false;
+      // Em qual conversa a fala esta. Quem digita manda isto em cada mensagem;
+      // quem fala, nao — entao a conexao guarda.
+      let conversaAtual = '';
+      // Sobe a cada turno. Audio sintetizado de um turno que o Lucas
+      // interrompeu chega atrasado, e sem isto tocaria em cima do turno novo.
+      let turno = 0;
+
+      socket.on('close', () => {
+        if (vozLigada) descartarEscuta(sessaoVoz);
+      });
+
+      const tratar = async (msg: any): Promise<void> => {
+        if (msg.t === 'voz') {
+          if (msg.ligado === false) {
+            vozLigada = false;
+            descartarEscuta(sessaoVoz);
+            return send({ t: 'voz', ligado: false });
+          }
+          if (!(await vozDisponivel())) {
+            return send({
+              t: 'error',
+              message: 'O servico de voz nao esta respondendo. Por texto continua funcionando.',
+            });
+          }
+          vozLigada = true;
+          return send({ t: 'voz', ligado: true, fala: sabeFalar(), taxa: taxaDaFala() });
         }
 
         if (msg.t === 'stop') {
+          turno += 1;
           aborter?.abort();
           // Parar tem de alcancar o que estava so esperando resposta: cartao de
           // autorizacao ainda de pe seria um botao vivo de um turno abandonado.
@@ -125,6 +173,7 @@ export async function canal(app: FastifyInstance): Promise<void> {
         }
 
         busy = true;
+        turno += 1;
         aborter = new AbortController();
 
         try {
@@ -148,9 +197,58 @@ export async function canal(app: FastifyInstance): Promise<void> {
 
           const userMsgId = saveMessage(conversationId, 'user', text);
           send({ t: 'saved', role: 'user', id: userMsgId, conversationId });
+          // Quem fala nao digita o identificador da conversa: a conversa falada
+          // precisa saber em qual delas esta, e e daqui que ela descobre.
+          conversaAtual = conversationId;
 
           const prompt = buildPrompt(conversationId);
           send({ t: 'start' });
+
+          // --- a fala, em pedacos --------------------------------------------
+          //
+          // Esperar a resposta inteira para comecar a falar poe uns tres
+          // segundos de silencio no meio da conversa. Entao: conforme o texto
+          // sai, corta no primeiro lugar onde a voz pausaria naturalmente e
+          // manda sintetizar.
+          //
+          // A fila e uma corrente de promessas, nao um punhado de chamadas
+          // soltas. Duas razoes: mantem a ordem das frases, e limita a uma
+          // sintese por vez — que e o que o servico de voz faz de qualquer
+          // jeito, porque o Piper nao e seguro para chamadas simultaneas.
+          const meuTurno = turno;
+          const vaiFalar = vozLigada && sabeFalar();
+          let porFalar = '';
+          let primeiroPedaco = true;
+          let sequencia = 0;
+          let fila: Promise<void> = Promise.resolve();
+
+          const mandarAudio = (trecho: string): void => {
+            fila = fila.then(async () => {
+              // Turno diferente = o Lucas interrompeu. O audio deste trecho
+              // nao serve mais, e tocar seria falar sozinho por cima dele.
+              if (turno !== meuTurno || socket.readyState !== 1) return;
+              const pcm = await falar(semMarcas(trecho));
+              if (!pcm?.length || turno !== meuTurno || socket.readyState !== 1) return;
+              socket.send(quadroDeAudio(sequencia++, taxaDaFala(), pcm));
+            });
+          };
+
+          const soltarFala = (acabou = false): void => {
+            if (!vaiFalar) return;
+            for (;;) {
+              const seguro = limiteSeguro(porFalar);
+              const sobrou = porFalar.slice(0, seguro);
+              const corte =
+                acabou && seguro === porFalar.length
+                  ? porFalar.length
+                  : pedacoFalavel(sobrou, primeiroPedaco);
+              if (!corte) return;
+              const trecho = porFalar.slice(0, corte);
+              porFalar = porFalar.slice(corte);
+              primeiroPedaco = false;
+              if (semMarcas(trecho).trim()) mandarAudio(trecho);
+            }
+          };
 
           let full = '';
           let usage: Usage | null = null;
@@ -175,6 +273,8 @@ export async function canal(app: FastifyInstance): Promise<void> {
                 // As marcas de memoria sao removidas no fim; enquanto escreve, o
                 // cliente esconde o que estiver dentro de uma marca em aberto.
                 send({ t: 'delta', text: ev.text });
+                porFalar += ev.text;
+                soltarFala();
               } else if (ev.type === 'tools') {
                 calls = ev.calls;
               } else if (ev.type === 'usage') {
@@ -201,6 +301,18 @@ export async function canal(app: FastifyInstance): Promise<void> {
                 content: await runTool(call.name, call.args),
               });
             }
+          }
+
+          // O que sobrou sem pontuacao no fim tambem tem de ser falado, senao
+          // a ultima frase morre pela metade.
+          soltarFala(true);
+          if (vaiFalar) {
+            // Nao segura o `done`: o texto chega na tela agora e o audio
+            // continua descendo. Avisa quando a fala termina, para a tela
+            // voltar a mostrar que esta ouvindo.
+            void fila.then(() => {
+              if (turno === meuTurno && socket.readyState === 1) send({ t: 'falou' });
+            });
           }
 
           if (usage) {
@@ -284,6 +396,72 @@ export async function canal(app: FastifyInstance): Promise<void> {
           busy = false;
           aborter = null;
         }
+      };
+
+      // --- o microfone chegando -------------------------------------------
+      //
+      // Um pedaco de 64 ms, dezesseis vezes por segundo, enquanto o microfone
+      // esta ligado. Quem decide se aquilo foi fala, e se a fala acabou, e o
+      // servico de voz — aqui so se repassa e se age no que ele responder.
+      let estavaFalando = false;
+      let ultimaQueixa = 0;
+
+      const aoAudio = async (pcm: Buffer): Promise<void> => {
+        if (!vozLigada) return;
+        const estado = await ouvir(sessaoVoz, pcm);
+
+        if (!estado) {
+          // Perder um pedaco nao e grave e acontece. Queixar-se a cada 64 ms
+          // seria pior que o problema, entao no maximo uma vez por minuto.
+          if (Date.now() - ultimaQueixa > 60_000) {
+            ultimaQueixa = Date.now();
+            send({ t: 'error', message: 'A voz parou de responder. Por texto continua.' });
+          }
+          return;
+        }
+
+        // Ele comecou a falar enquanto o Thor falava. Isso e interromper, e
+        // interromper tem de ser instantaneo: o navegador cala a boca ao
+        // receber `calar`, e o turno novo invalida o audio que ainda vier.
+        if (estado.falando && busy) {
+          turno += 1;
+          aborter?.abort();
+          cancelarPendentes();
+          send({ t: 'calar' });
+        }
+
+        if (estado.falando !== estavaFalando) {
+          estavaFalando = estado.falando;
+          send({ t: 'ouvindo', falando: estado.falando });
+        }
+
+        if (!estado.parou) return;
+
+        estavaFalando = false;
+        const dito = (estado.texto ?? '').trim();
+        if (!dito) return send({ t: 'ouvindo', falando: false });
+        send({ t: 'ouvi', texto: dito, segundos: estado.segundos });
+        await tratar({ t: 'chat', text: dito, conversationId: conversaAtual });
+      };
+
+      // Quadro binario e audio do microfone; quadro de texto e JSON. Esta e a
+      // unica distincao que o protocolo precisa, e o `ws` ja a entrega pronta.
+      socket.on('message', async (raw: Buffer, binario: boolean) => {
+        if (binario) {
+          try {
+            await aoAudio(raw);
+          } catch (e: any) {
+            app.log.warn({ e }, 'audio do microfone falhou');
+          }
+          return;
+        }
+        let msg: any;
+        try {
+          msg = JSON.parse(raw.toString());
+        } catch {
+          return send({ t: 'error', message: 'mensagem invalida' });
+        }
+        await tratar(msg);
       });
 
       send({
@@ -296,6 +474,13 @@ export async function canal(app: FastifyInstance): Promise<void> {
         entrevista: precisaEntrevistar()
           ? { pergunta: perguntaAtual(), total: totalDePerguntas }
           : null,
+      });
+
+      // Saber se a voz esta no ar e uma ida na rede, e o `ready` e o que
+      // destrava a tela — nao pode esperar por isto. Vai logo depois, e o
+      // botao do microfone so aparece quando a resposta chega.
+      void vozDisponivel().then((ok) => {
+        if (socket.readyState === 1) send({ t: 'voz', disponivel: ok, fala: sabeFalar() });
       });
     });
   });

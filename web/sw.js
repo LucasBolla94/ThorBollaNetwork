@@ -18,6 +18,8 @@ const SHELL = [
   '/app.js',
   '/hud.js',
   '/neural.js',
+  '/voz.js',
+  '/voz-captura.js',
   '/icon.svg',
   '/manifest.webmanifest',
 ];

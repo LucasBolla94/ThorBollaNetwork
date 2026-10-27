@@ -251,6 +251,17 @@ const RE_REMEMBER = /<lembrar(?:\s+tipo=["']?([a-zA-Zçã]+)["']?)?\s*>([\s\S]*?
 const RE_CORRECT = /<corrigir\s+id=["']?([0-9a-fA-F-]{8,})["']?\s*>([\s\S]*?)<\/corrigir>/gi;
 
 /**
+ * Os nomes das marcas, num lugar so.
+ *
+ * Quem fala em voz alta tambem precisa saber disto: uma marca lida em voz alta
+ * sai como "menor que lembrar maior que", e quem ouve nao entende nada. Antes
+ * ficava uma copia da lista em `voz.ts`, e acrescentar uma marca nova exigiria
+ * lembrar de mexer nos dois — do tipo de esquecimento que nao da erro, so
+ * comeca a falar besteira.
+ */
+export const MARCAS = ['lembrar', 'corrigir'] as const;
+
+/**
  * Tira as marcas do texto, sem guardar nada.
  *
  * Existe separado de `extractAndStore` por causa da ordem no banco: a mensagem

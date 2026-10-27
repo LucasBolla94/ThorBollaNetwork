@@ -1,0 +1,62 @@
+[Unit]
+Description=Thor — servico de voz (ouvir e falar)
+Documentation=https://github.com/LucasBolla94/ThorBollaNetwork
+After=network.target
+# O Thor sobe mesmo sem isto: sem voz ele responde por texto, igual a antes.
+# Por isso nada aqui e `Requires`.
+Before=thor.service
+
+[Service]
+Type=simple
+User=thor
+Group=thor
+WorkingDirectory=/opt/thor/repo/ferramentas/voz
+Environment=THOR_VOZ_PORTA=8798
+# Quatro das oito linhas do processador. Transcrever e o unico trabalho pesado
+# aqui, e dar as oito faria o Thor engasgar junto a cada frase ouvida.
+Environment=THOR_VOZ_THREADS=4
+Environment=THOR_VOZ_MODELO=/opt/thor/data/voz/voz.onnx
+# Os modelos ficam no unico lugar gravavel. Sem isto o faster-whisper tenta
+# escrever em ~/.cache e falha em silencio sob ProtectHome.
+Environment=HF_HOME=/opt/thor/data/modelos
+Environment=XDG_CACHE_HOME=/opt/thor/data/modelos
+ExecStart=/opt/thor/data/voz-venv/bin/python servidor.py
+Restart=always
+RestartSec=5
+
+# Carregar os dois modelos leva uns 30s, e na primeira vez baixa o de escuta.
+# Sem esta folga o systemd mata o processo achando que travou.
+TimeoutStartSec=900
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=thor-voz
+
+# --- Isolamento -----------------------------------------------------------
+# Este processo ouve o microfone do dono e fala com a voz dele. E o processo
+# mais sensivel do sistema: vale apertar mais, nao menos.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectClock=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+ReadWritePaths=/opt/thor/data/modelos
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+# Teto de memoria. Medido: 2,9 GB com o modelo de escuta `small` carregado e
+# transcrevendo. 5 GB da folga de verdade para um modelo maior sem deixar um
+# vazamento comer a maquina.
+MemoryMax=5G
+
+[Install]
+WantedBy=multi-user.target

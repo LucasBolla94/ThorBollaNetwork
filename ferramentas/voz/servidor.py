@@ -178,6 +178,40 @@ torch.set_num_threads(THREADS)
 from silero_vad import load_silero_vad  # noqa: E402
 
 _detector = load_silero_vad(onnx=True)
+
+
+# ===========================================================================
+# Um detector POR CONVERSA, e não um só para todas.
+#
+# **O erro que isto conserta.** O detector não é uma função: é uma rede
+# recorrente, que guarda estado entre chamadas — é assim que ele sabe
+# distinguir uma pausa no meio da frase de um fim de fala. Um detector único,
+# compartilhado, significa que o estado de uma conversa entra na outra.
+#
+# Duas consequências, e as duas aconteceram:
+#
+#   entre turnos    o silêncio do turno anterior ficava no estado, e o turno
+#                   seguinte às vezes simplesmente não fechava. Medindo a
+#                   espera, uma frase em quatro travou para sempre — e um
+#                   turno que não fecha é o Thor nunca responder.
+#   entre aparelhos o dono pode ter o site aberto no celular e no computador.
+#                   Com estado compartilhado, o microfone de um corrompe a
+#                   deteccao do outro. Isso não daria erro em lugar nenhum:
+#                   só funcionaria mal, de forma intermitente.
+#
+# Carregar um detector custa ~1,4 s e 2 MB. Acontece uma vez por conversa,
+# enquanto a pessoa ainda está autorizando o microfone no navegador, então o
+# tempo não aparece. Barato para o que resolve.
+# ===========================================================================
+def novo_detector():
+    try:
+        return load_silero_vad(onnx=True)
+    except Exception as e:  # noqa: BLE001
+        # Sem detector próprio, melhor o compartilhado que nada — a conversa
+        # funciona, só fica sujeita ao vazamento de estado.
+        print(f"[voz] nao criei detector proprio ({type(e).__name__}); "
+              f"usando o compartilhado", file=sys.stderr, flush=True)
+        return _detector
 print(f"[voz] detector pronto em {time.time() - _t0:.1f}s "
       f"(0,4 ms por quadro de 32 ms, medido)", flush=True)
 
@@ -283,6 +317,9 @@ class Sessao:
         # Transcrição adiantada, começada durante a pausa. Vale só enquanto a
         # pausa durar: qualquer quadro de fala a invalida.
         self.adiantada = None
+        # O detector é desta conversa e de mais ninguém. O porquê está em
+        # `novo_detector`.
+        self.detector = novo_detector()
 
     def zerar(self):
         self.falando = False
@@ -291,6 +328,13 @@ class Sessao:
         self.quadros_silencio = 0
         self.antes.clear()
         self.adiantada = None
+        # Turno novo começa sem a memória do anterior. Sem isto, o silêncio
+        # que fechou o turno passado continua no estado da rede e o turno
+        # seguinte pode simplesmente não fechar.
+        try:
+            self.detector.reset_states()
+        except Exception:  # noqa: BLE001
+            pass
 
 
 _sessoes: dict = {}
@@ -393,7 +437,7 @@ def engolir(s: Sessao, pcm: bytes) -> dict:
         for i in range(inteiros):
             quadro = dados[i * passo:(i + 1) * passo]
             amostras = np.frombuffer(quadro, dtype="<i2").astype("float32") / 32768.0
-            chance = float(_detector(torch.from_numpy(amostras), TAXA_ESCUTA).item())
+            chance = float(s.detector(torch.from_numpy(amostras), TAXA_ESCUTA).item())
 
             if chance >= LIMIAR_FALA:
                 # Voltou a falar: o que foi adiantado durante a pausa não

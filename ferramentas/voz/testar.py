@@ -84,7 +84,11 @@ def ler_frase(indice=0):
         import librosa
         x = np.frombuffer(bruto, dtype="<i2").astype("float32") / 32768.0
         x = librosa.resample(x, orig_sr=taxa, target_sr=TAXA)
-        bruto = (x * 32767).astype("<i2").tobytes()
+        # Trava em -1..1 antes de converter. Reamostrar pode passar de 1,0, e
+        # 1,008 × 32767 estoura o inteiro de 16 bits virando um negativo
+        # enorme — um estalo que o detector nunca reconhece como fala. Uma
+        # frase do corpus faz exatamente isso, e o turno dela nunca fechava.
+        bruto = (np.clip(x, -1.0, 1.0) * 32767).astype("<i2").tobytes()
     return bruto, texto
 
 
@@ -206,6 +210,43 @@ def main() -> int:
                      parar_ao_fechar=True)
     conferir("nao fechou na pausa curta", not any(e.get("parou") for e in estados))
 
+    print("\n=== varios turnos seguidos, todos fecham ===")
+    # **Esta conferencia nasceu de um erro que ja foi ao ar.** O detector de
+    # fala e uma rede recorrente: guarda estado entre chamadas, e e assim que
+    # ele distingue pausa de fim de fala. Havia um detector unico para todas as
+    # conversas, entao o silencio de um turno ficava no estado e o turno
+    # seguinte as vezes NAO FECHAVA — o Thor nunca responderia. Medindo a
+    # espera, uma frase em quatro travou.
+    #
+    # Nao da erro em lugar nenhum: so funciona mal, de vez em quando. Por isso
+    # tem de haver um teste, e por isso ele usa a MESMA sessao varias vezes.
+    audio2, _ = ler_frase(2)
+    fechados = 0
+    for volta in range(4):
+        fonte = audio if volta % 2 == 0 else audio2
+        estados = mandar("t-seguidos", silencio(150) + fonte + silencio(1100))
+        if any(e.get("parou") for e in estados):
+            fechados += 1
+    conferir("quatro turnos na mesma sessao, todos fecharam", fechados == 4,
+             f"{fechados} de 4")
+
+    print("\n=== duas conversas ao mesmo tempo nao se atrapalham ===")
+    # O dono pode ter o site aberto no celular e no computador. Com estado
+    # compartilhado, o microfone de um corromperia a deteccao do outro.
+    passo_b = PEDACO * 2
+    a_fechou = b_fechou = False
+    pcm_a = silencio(150) + audio + silencio(1100)
+    pcm_b = silencio(150) + audio2 + silencio(1100)
+    for i in range(0, max(len(pcm_a), len(pcm_b)), passo_b):
+        if i < len(pcm_a) and not a_fechou:
+            r, _ = pedir("/ouvir/t-par-a", pcm_a[i:i + passo_b], "application/octet-stream")
+            a_fechou = a_fechou or bool(r.get("parou"))
+        if i < len(pcm_b) and not b_fechou:
+            r, _ = pedir("/ouvir/t-par-b", pcm_b[i:i + passo_b], "application/octet-stream")
+            b_fechou = b_fechou or bool(r.get("parou"))
+    conferir("as duas fecharam o turno", a_fechou and b_fechou,
+             f"a={'ok' if a_fechou else 'travou'} b={'ok' if b_fechou else 'travou'}")
+
     print("\n=== fechar na forca devolve o que tinha ===")
     mandar("t-forca", silencio(150) + audio[:meio], parar_ao_fechar=False)
     fim, _ = pedir("/ouvir/t-forca/fim", b"", "application/octet-stream")
@@ -242,7 +283,8 @@ def main() -> int:
     print(f"\n{total - falhas}/{total} conferencias passaram")
     if falhas:
         print(f"{falhas} FALHA(S)")
-    for s in ("t-silencio", "t-estalo", "t-frase", "t-pausa", "t-forca"):
+    for s in ("t-silencio", "t-estalo", "t-frase", "t-pausa", "t-forca",
+              "t-seguidos", "t-par-a", "t-par-b"):
         urllib.request.urlopen(
             urllib.request.Request(f"{ENDERECO}/ouvir/{s}", method="DELETE"), timeout=5
         ).read()

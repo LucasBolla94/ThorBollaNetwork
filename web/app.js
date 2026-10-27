@@ -4,7 +4,7 @@
 
 import { criarReator } from './hud.js';
 import { criarRede } from './neural.js';
-import { criarVoz } from './voz.js';
+import { criarEscutaDoNavegador, criarVoz, navegadorSabeOuvir } from './voz.js';
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => [...document.querySelectorAll(sel)];
@@ -16,11 +16,13 @@ const state = {
   streaming: false,
   ws: null,
   retry: 0,
-  // voz: `pode` vem do servidor (o servico esta no ar?), `ligada` e a escolha
-  // dele no botao do microfone.
-  vozPode: false,
-  vozFala: false,
+  // voz. `servidorOuve` e `servidorFala` vem do servidor; `vozLigada` e a
+  // escolha dele no botao; `comoOuvir` diz quem esta ouvindo de fato.
+  servidorOuve: false,
+  servidorFala: false,
   vozLigada: false,
+  queriaVoz: false,
+  comoOuvir: '',
 };
 
 // ------------------------------------------------------------------ utils
@@ -457,21 +459,68 @@ function dizerDaVoz(nome, extra) {
   if (nome === 'negado' || nome === 'erro') desligarVoz();
 }
 
+let escutaNavegador = null;
+
+/**
+ * Quem vai ouvir: o servidor ou o navegador.
+ *
+ * O do servidor ganha quando esta disponivel, por dois motivos: funciona em
+ * qualquer navegador (o do navegador nao existe no Firefox) e vai continuar
+ * funcionando no app, que nao tem navegador nenhum. O do navegador e o plano
+ * B que permite conversar sem depender de criar conta em lugar nenhum.
+ */
+function quemOuve() {
+  if (state.servidorOuve) return 'servidor';
+  if (navegadorSabeOuvir()) return 'navegador';
+  return '';
+}
+
 function mostrarBotaoDaVoz() {
   const b = $('#btn-mic');
-  if (b) b.hidden = !state.vozPode;
+  if (!b) return;
+  // Sem ninguem para ouvir e sem ninguem para falar, o botao nao prometeria
+  // nada. Com qualquer um dos dois ele ja serve.
+  b.hidden = !quemOuve() && !state.servidorFala;
 }
 
 async function ligarVoz() {
   state.queriaVoz = true;
-  if (!state.vozPode || state.vozLigada) return;
-  // A ordem importa: pede o microfone ANTES de avisar o servidor. Se a pessoa
+  if (state.vozLigada) return;
+  const como = quemOuve();
+  if (!como && !state.servidorFala) return;
+
+  // A ordem importa: pede o microfone ANTES de avisar o servidor. Se ele
   // recusar a permissao, o servidor nunca cria uma sessao de escuta que
   // ficaria esperando audio que nunca vem.
-  if (!(await voz.ligar())) return;
+  if (como === 'servidor') {
+    if (!(await voz.ligar())) return;
+  } else if (como === 'navegador') {
+    escutaNavegador ??= criarEscutaDoNavegador({
+      aoTexto: (texto) => {
+        // Falar por cima e interromper: cala a boca dele e cancela o turno
+        // antes de mandar o que foi dito, senao `send` recusa por estar
+        // ocupado e a frase se perde.
+        voz.pararDeTocar();
+        if (state.streaming) {
+          state.ws?.send(JSON.stringify({ t: 'stop' }));
+          state.streaming = false;
+        }
+        send(texto);
+      },
+      aoFalando: () => {
+        if (voz.estaTocando()) voz.pararDeTocar();
+      },
+      aoEstado: dizerDaVoz,
+    });
+    if (!escutaNavegador.ligar()) return;
+  }
+
+  state.comoOuvir = como;
   state.vozLigada = true;
   $('#btn-mic')?.setAttribute('aria-pressed', 'true');
-  state.ws?.send(JSON.stringify({ t: 'voz', ligado: true }));
+  state.ws?.send(
+    JSON.stringify({ t: 'voz', ligado: true, ouvir: como === 'servidor', falar: true }),
+  );
 }
 
 /**
@@ -486,8 +535,10 @@ function desligarVoz(porVontade = true) {
   if (porVontade) state.queriaVoz = false;
   if (!state.vozLigada) return;
   state.vozLigada = false;
+  state.comoOuvir = '';
   $('#btn-mic')?.setAttribute('aria-pressed', 'false');
   void voz.desligar();
+  escutaNavegador?.desligar();
   if (state.ws?.readyState === 1) state.ws.send(JSON.stringify({ t: 'voz', ligado: false }));
 }
 
@@ -542,16 +593,18 @@ function connect() {
         // Chega duas vezes com sentidos diferentes: logo apos conectar, dizendo
         // se o servico esta no ar; e como confirmacao de ligar ou desligar.
         if (typeof m.disponivel === 'boolean') {
-          state.vozPode = m.disponivel;
-          state.vozFala = m.fala === true;
+          state.servidorOuve = m.ouve === true;
+          state.servidorFala = m.fala === true;
           mostrarBotaoDaVoz();
-          // Servico no ar mas sem a chave de quem entende a fala: dizer isso
-          // e melhor que esconder o botao em silencio, senao o recurso parece
-          // nao existir e ele nunca descobre que falta um passo so.
+          // Falta a chave, mas o navegador sabe ouvir: nao e um problema, e
+          // uma diferenca que vale dizer uma vez — o caminho do navegador so
+          // funciona com a aba na frente, e nao vai existir no app.
           if (m.faltaChave) {
             const d = $('#voz-hint');
             if (d) {
-              d.textContent = 'Para ele te ouvir, falta uma chave em Configuracao.';
+              d.textContent = navegadorSabeOuvir()
+                ? 'Ouvindo pelo navegador. Para ele te ouvir sempre, falta uma chave em Configuracao.'
+                : 'Para ele te ouvir, falta uma chave em Configuracao.';
               d.hidden = false;
             }
           }

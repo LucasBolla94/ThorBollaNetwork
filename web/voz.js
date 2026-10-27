@@ -164,3 +164,107 @@ export function criarVoz({ aoPedaco, aoEstado }) {
 
   return { ligar, desligar, tocar, pararDeTocar, estaTocando, ligada: () => ligada };
 }
+
+// ======================================================================
+// Ouvir usando o reconhecimento do proprio navegador.
+//
+// **Por que existe, alem do caminho do servidor.** Medido no servidor do dono,
+// entender uma frase ali dentro leva 5,6 segundos — o processador e de 2013 e
+// nao tem a instrucao de que o modelo depende. A saida rapida e transcrever
+// fora, e isso exige uma chave que ele precisa criar.
+//
+// O navegador ja sabe fazer isso, de graca e sem chave nenhuma. Entao serve
+// para conversar HOJE, sem depender de cadastro em lugar nenhum.
+//
+// **O que se perde.** Depende do navegador (Chrome e Safari sim, Firefox nao),
+// so funciona com a aba na frente, e o audio vai para o servidor do fabricante
+// do navegador — a mesma troca do caminho da nuvem, sem a escolha de qual
+// servico. Tambem nao serve para o app nativo, que nao tem navegador.
+//
+// Por isso e a segunda opcao, nao a primeira: quando houver chave, o caminho
+// do servidor ganha, porque funciona em qualquer navegador e no app.
+// ======================================================================
+
+export const navegadorSabeOuvir = () =>
+  typeof window !== 'undefined' &&
+  !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+
+export function criarEscutaDoNavegador({ aoTexto, aoFalando, aoEstado }) {
+  const Motor = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let motor = null;
+  let querendo = false;
+
+  function montar() {
+    const m = new Motor();
+    m.lang = 'pt-BR';
+    // `continuous` mantem escutando entre frases, em vez de parar na primeira.
+    m.continuous = true;
+    // Os parciais existem para uma coisa so: saber que ele comecou a falar,
+    // para calar o Thor na hora. O texto que vale e sempre o final.
+    m.interimResults = true;
+    m.maxAlternatives = 1;
+
+    m.onresult = (ev) => {
+      let falou = '';
+      for (let i = ev.resultIndex; i < ev.results.length; i++) {
+        const r = ev.results[i];
+        if (r.isFinal) falou += r[0].transcript;
+        else aoFalando?.(true);
+      }
+      const limpo = falou.trim();
+      if (limpo) aoTexto?.(limpo);
+    };
+
+    m.onerror = (ev) => {
+      // `no-speech` e `aborted` sao rotina: silencio longo e troca de turno.
+      // Tratar como falha encheria a tela de aviso a cada pausa.
+      if (ev.error === 'no-speech' || ev.error === 'aborted') return;
+      if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') {
+        querendo = false;
+        return aoEstado?.('negado');
+      }
+      aoEstado?.('erro', { erro: ev.error });
+    };
+
+    // O motor se encerra sozinho depois de um tempo de silencio, mesmo com
+    // `continuous`. Sem religar, a conversa morre em silencio e sem aviso —
+    // o jeito mais confuso de quebrar que existe.
+    m.onend = () => {
+      if (!querendo) return aoEstado?.('desligada');
+      try {
+        m.start();
+      } catch {
+        // Ja estava comecando: a proxima chamada de `onend` tenta de novo.
+      }
+    };
+    return m;
+  }
+
+  return {
+    ligar() {
+      if (querendo) return true;
+      querendo = true;
+      try {
+        motor = montar();
+        motor.start();
+        aoEstado?.('ouvindo');
+        return true;
+      } catch (e) {
+        querendo = false;
+        aoEstado?.('erro', { erro: String(e?.message || e) });
+        return false;
+      }
+    },
+    desligar() {
+      querendo = false;
+      try {
+        motor?.stop();
+      } catch {
+        /* ja parado */
+      }
+      motor = null;
+      aoEstado?.('desligada');
+    },
+    ligada: () => querendo,
+  };
+}

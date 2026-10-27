@@ -95,7 +95,10 @@ export async function canal(app: FastifyInstance): Promise<void> {
       // computador ao mesmo tempo: com o nome igual, o audio das duas abas
       // cairia na mesma fila e as frases se intercalariam.
       const sessaoVoz = `${session.id}-${Date.now().toString(36)}`;
-      let vozLigada = false;
+      // Duas vontades separadas: mandar audio para o servidor ouvir, e receber
+      // audio para ele falar. Quem escuta pelo navegador quer so a segunda.
+      let querOuvir = false;
+      let querFalar = false;
       // Em qual conversa a fala esta. Quem digita manda isto em cada mensagem;
       // quem fala, nao — entao a conexao guarda.
       let conversaAtual = '';
@@ -104,18 +107,26 @@ export async function canal(app: FastifyInstance): Promise<void> {
       let turno = 0;
 
       socket.on('close', () => {
-        if (vozLigada) descartarEscuta(sessaoVoz);
+        if (querOuvir) descartarEscuta(sessaoVoz);
       });
 
       const tratar = async (msg: any): Promise<void> => {
+        // **Ouvir e falar sao independentes, e isso nao e detalhe.** Quando o
+        // reconhecimento do proprio navegador faz a escuta, o servidor nao
+        // recebe audio nenhum — mas continua tendo de FALAR. Com uma chave so
+        // para as duas coisas, esse caminho nao existiria: ou tudo, ou nada.
         if (msg.t === 'voz') {
           if (msg.ligado === false) {
-            vozLigada = false;
-            descartarEscuta(sessaoVoz);
+            if (querOuvir) descartarEscuta(sessaoVoz);
+            querOuvir = false;
+            querFalar = false;
             return send({ t: 'voz', ligado: false });
           }
           await vozDisponivel();
-          if (!sabeOuvir()) {
+          // Quem pede so para falar (porque escuta no navegador) nao precisa
+          // que a escuta do servidor esteja de pe.
+          const pediuOuvir = msg.ouvir !== false;
+          if (pediuOuvir && !sabeOuvir()) {
             return send({
               t: 'error',
               message: escutaNaNuvem() && !podeEscutarNaNuvem()
@@ -123,8 +134,15 @@ export async function canal(app: FastifyInstance): Promise<void> {
                 : 'O servico de voz nao esta respondendo. Por texto continua funcionando.',
             });
           }
-          vozLigada = true;
-          return send({ t: 'voz', ligado: true, fala: sabeFalar(), taxa: taxaDaFala() });
+          querOuvir = pediuOuvir;
+          querFalar = msg.falar !== false && sabeFalar();
+          return send({
+            t: 'voz',
+            ligado: true,
+            ouvindo: querOuvir,
+            fala: querFalar,
+            taxa: taxaDaFala(),
+          });
         }
 
         if (msg.t === 'stop') {
@@ -223,7 +241,7 @@ export async function canal(app: FastifyInstance): Promise<void> {
           // sintese por vez — que e o que o servico de voz faz de qualquer
           // jeito, porque o Piper nao e seguro para chamadas simultaneas.
           const meuTurno = turno;
-          const vaiFalar = vozLigada && sabeFalar();
+          const vaiFalar = querFalar && sabeFalar();
           let porFalar = '';
           let primeiroPedaco = true;
           let sequencia = 0;
@@ -414,7 +432,7 @@ export async function canal(app: FastifyInstance): Promise<void> {
       let ultimaQueixa = 0;
 
       const aoAudio = async (pcm: Buffer): Promise<void> => {
-        if (!vozLigada) return;
+        if (!querOuvir) return;
         const estado = await ouvir(sessaoVoz, pcm);
 
         if (!estado) {
@@ -504,8 +522,12 @@ export async function canal(app: FastifyInstance): Promise<void> {
         if (socket.readyState !== 1) return;
         send({
           t: 'voz',
-          disponivel: sabeOuvir(),
+          // As duas vao separadas porque o cliente decide com elas: se o
+          // servidor nao ouve, o navegador pode ouvir no lugar dele e ainda
+          // assim precisar que o servidor fale.
+          ouve: sabeOuvir(),
           fala: sabeFalar(),
+          disponivel: sabeOuvir() || sabeFalar(),
           // Quando o servico esta no ar mas falta a chave, a tela precisa
           // dizer isso em vez de so esconder o botao: senao o recurso parece
           // nao existir, e ele nunca descobre que falta um passo so.

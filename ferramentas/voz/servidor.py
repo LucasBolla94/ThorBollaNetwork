@@ -41,33 +41,44 @@ depurar com `curl`. WebSocket aqui dentro só acrescentaria uma biblioteca e um
 jeito a mais de quebrar.
 
 
-## Onde a transcrição acontece: aqui ou na nuvem
+## Onde a transcrição acontece, e por que o Whisper não serve aqui
 
-Medido neste servidor, com as 300 frases que o dono gravou (a conta está em
-`ferramentas/medir-escuta.py` e `medir-escuta-fundo.py`):
+Medido neste servidor com as 300 frases que o dono gravou, usando a voz dele e
+o português dele (as contas estão em `ferramentas/medir-escuta*.py`):
 
-    modelo            velocidade        erro      por frase
-    small               0,6x real       10%         5,6 s
-    medium              0,2x real        6%        17,0 s
-    large-v3-turbo      0,1x real        6%        27,5 s
+    modelo                 velocidade      erro      por frase
+    whisper small            0,6x real     10,1%        5,64 s
+    whisper medium           0,2x           5,9%       17,0 s
+    whisper large-v3-turbo   0,1x           5,9%       27,5 s
+    vosk pequeno             2,1x          22,1%        1,78 s
+    vosk grande             19,1x          18,6%        0,20 s
+    wav2vec2 bp400-xlsr      2,3x           8,0%        1,65 s
 
-**0,6x significa mais devagar do que a fala acontece.** Uma frase de quatro
-segundos custa 5,6 segundos para ser entendida. Isso não é conversa, é
-rádio amador.
+**O Whisper é o pior dos três caminhos aqui, e não por ser grande.** É pelo
+formato: ele sempre processa uma janela de 30 segundos, completando com
+silêncio o que falta, e depois escreve a resposta palavra por palavra, cada
+uma dependendo da anterior. Medido: **~5,2 s fixos por chamada mais 0,11 s por
+segundo de áudio**. Conversa é feita de frases de três segundos, que pagam o
+preço inteiro dos trinta.
 
-A causa é o processador: um Xeon de 2013, com AVX mas **sem AVX2**, que é a
-instrução de que o motor do Whisper mais depende. Testei quantizar diferente
-(int8, int16, float32) e não muda nada — float32 saiu até um pouco mais lento.
-Não é ajuste errado, é a máquina.
+O `wav2vec2` não faz nenhuma das duas coisas: olha o áudio inteiro de uma vez
+e escreve tudo de uma vez. O custo acompanha a duração real. Resultado: **um
+terço do tempo do Whisper e acertando mais** (8,0% contra 10,1%).
 
-Então existem dois modos, e o padrão é `nuvem`:
+O Vosk grande voa — 19x — mas erra 18,6%, quase uma palavra em cinco. Numa
+conversa isso faz o agente responder a outra pergunta, o que é pior que
+demorar.
 
-    local   transcreve aqui. Honesto e privado, mas 5,6 s por frase neste
-            processador. Serve se um dia a máquina trocar, ou se o dono
-            preferir que nada saia daqui e aceitar a espera.
-    nuvem   manda o áudio do turno para o Thor transcrever fora. Rápido e
-            barato. O serviço nem carrega o modelo de escuta, o que economiza
-            2,9 GB de memória.
+Então três modos:
+
+    wav2vec2   transcreve AQUI, nada sai da máquina. 1,65 s por frase, que
+               somados ao resto dão ~3,0 s do ponto final dele ao primeiro som.
+               Arrastado, mas é conversa — e é inteiramente dele.
+    nuvem      manda o áudio do turno para o Thor transcrever fora: ~1,8 s de
+               ponta a ponta e 6% de erro, por US$ 0,04 a hora de fala. O
+               serviço nem carrega modelo de escuta.
+    whisper:<tamanho>   fica disponível para quando a máquina trocar. Num
+               processador com AVX2 o `small` faz isso em meio segundo.
 
 **Sobre o que sai da máquina no modo nuvem.** Sai o áudio do que o dono falou.
 O texto dessa mesma conversa já vai para a LLM na nuvem de qualquer forma —
@@ -97,6 +108,7 @@ import threading
 import time
 import wave
 from collections import deque
+from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 # Antes de carregar qualquer modelo: sem isto o onnxruntime toma todos os
@@ -107,7 +119,7 @@ os.environ.setdefault("OMP_NUM_THREADS", str(THREADS))
 import numpy as np  # noqa: E402
 
 PORTA = int(os.environ.get("THOR_VOZ_PORTA", "8798"))
-MODELO_ESCUTA = os.environ.get("THOR_VOZ_ESCUTA", "small")
+MODELO_ESCUTA = os.environ.get("THOR_VOZ_ESCUTA", "lgris/bp400-xlsr")
 CAMINHO_VOZ = os.environ.get("THOR_VOZ_MODELO", "/opt/thor/data/voz/voz.onnx")
 
 TAXA_ESCUTA = 16000      # o Whisper só trabalha nesta taxa
@@ -134,6 +146,26 @@ FALA_MINIMA_MS = int(os.environ.get("THOR_VOZ_FALA_MINIMA_MS", "280"))
 ANTES_MS = int(os.environ.get("THOR_VOZ_ANTES_MS", "320"))
 LIMIAR_FALA = float(os.environ.get("THOR_VOZ_LIMIAR", "0.5"))
 
+# ---------------------------------------------------------------------------
+# Começar a entender durante a pausa, em vez de esperar ela acabar.
+#
+# A sequência ingênua é: espera 520 ms de silêncio para ter certeza de que
+# acabou, e só então transcreve. Mas esses 520 ms são tempo de processador
+# PARADO, e transcrever leva 1,65 s — então a espera total é a soma dos dois.
+#
+# Aqui, assim que a pausa passa de ESPECULAR_MS, a transcrição começa num
+# thread à parte, com o áudio que já existe. Se a pausa virar fim de turno, o
+# resultado já está pronto ou quase. Se ele voltar a falar, joga-se fora.
+#
+# O silêncio a mais que entra depois não muda a transcrição: é silêncio.
+#
+# O valor é um equilíbrio. Baixo demais e cada pausa no meio da frase dispara
+# um trabalho descartado; alto demais e sobra pouco tempo para adiantar.
+# 200 ms fica acima da pausa comum entre palavras e bem abaixo dos 520.
+# ---------------------------------------------------------------------------
+ESPECULAR_MS = int(os.environ.get("THOR_VOZ_ESPECULAR_MS", "200"))
+ESPECULAR = os.environ.get("THOR_VOZ_ESPECULAR", "1") != "0"
+
 TETO_TURNO_S = 45        # ninguém fala 45s seguidos com um assistente
 VALIDADE_SESSAO_S = 300  # sessão esquecida é limpa, para não vazar memória
 LIMITE_CORPO = 4_000_000
@@ -149,22 +181,66 @@ _detector = load_silero_vad(onnx=True)
 print(f"[voz] detector pronto em {time.time() - _t0:.1f}s "
       f"(0,4 ms por quadro de 32 ms, medido)", flush=True)
 
-# No modo nuvem o modelo nem e carregado: quem transcreve e o Thor, do outro
-# lado. Economiza 2,9 GB de memoria e os 30s de arranque.
+# Qual dos tres caminhos. No modo nuvem nada e carregado: quem transcreve e o
+# Thor, do outro lado. Economiza memoria e o tempo de arranque.
 _escuta = None
+_processador = None
+_transcrever_local = None
 NA_NUVEM = MODELO_ESCUTA.lower() in ("nuvem", "remota", "remoto")
+USA_WHISPER = MODELO_ESCUTA.lower().startswith("whisper")
+
 if NA_NUVEM:
     print("[voz] escuta NA NUVEM: aqui so detecto fala e mando o audio do turno",
           flush=True)
-else:
-    print(f"[voz] carregando escuta ({MODELO_ESCUTA}) aqui mesmo...", flush=True)
+
+elif USA_WHISPER:
+    # Fica para quando a maquina trocar: num processador com AVX2 o `small`
+    # faz em meio segundo o que aqui leva 5,6s.
+    tamanho = MODELO_ESCUTA.split(":", 1)[1] if ":" in MODELO_ESCUTA else "small"
+    print(f"[voz] carregando whisper {tamanho}...", flush=True)
     _t0 = time.time()
     from faster_whisper import WhisperModel  # noqa: E402
 
-    _escuta = WhisperModel(MODELO_ESCUTA, device="cpu", compute_type="int8",
-                           cpu_threads=THREADS)
+    _escuta = WhisperModel(tamanho, device="cpu", compute_type="int8", cpu_threads=THREADS)
+    print(f"[voz] whisper pronto em {time.time() - _t0:.1f}s "
+          f"(medido nesta maquina: ~5,6s por frase)", flush=True)
+
+    def _transcrever_local(dados):  # noqa: F811
+        # beam_size=1 de proposito: numa conversa, 200 ms de demora pesam mais
+        # que o ganho de procurar mais caminhos.
+        trechos, _ = _escuta.transcribe(
+            dados, language="pt", beam_size=1,
+            condition_on_previous_text=False,
+            vad_filter=False,   # o corte ja foi feito aqui, pelo detector
+        )
+        return " ".join(t.text for t in trechos).strip()
+
+else:
+    # O caminho normal daqui. Medido: 1,65s por frase e 8,0% de erro — um
+    # terco do tempo do Whisper, acertando mais que ele.
+    print(f"[voz] carregando escuta ({MODELO_ESCUTA}) aqui mesmo...", flush=True)
+    _t0 = time.time()
+    import torch  # noqa: E402
+
+    # Medido: 4 threads bate 8 (1,65s contra 1,71s) e bate muito 2 (2,91s).
+    # Dividir o trabalho tem custo, e passa a pesar mais que a conta.
+    torch.set_num_threads(THREADS)
+    from transformers import Wav2Vec2ForCTC, Wav2Vec2Processor  # noqa: E402
+
+    _processador = Wav2Vec2Processor.from_pretrained(MODELO_ESCUTA)
+    _escuta = Wav2Vec2ForCTC.from_pretrained(MODELO_ESCUTA).eval()
     print(f"[voz] escuta pronta em {time.time() - _t0:.1f}s "
-          f"(medido: ~5,6s por frase com `small` nesta maquina)", flush=True)
+          f"(medido: 1,65s por frase, 8% de erro)", flush=True)
+
+    def _transcrever_local(dados):  # noqa: F811
+        entrada = _processador(dados, sampling_rate=TAXA_ESCUTA,
+                               return_tensors="pt", padding=True)
+        with torch.no_grad():
+            logits = _escuta(entrada.input_values).logits
+        # Este modelo devolve tudo em minusculas e sem pontuacao. Nao e
+        # problema: quem le o texto e a LLM, que entende igual. Pontuar aqui
+        # custaria outro modelo e outra espera.
+        return _processador.batch_decode(torch.argmax(logits, dim=-1))[0].strip()
 
 _fala = None
 _ajuste_fala = None
@@ -204,6 +280,9 @@ class Sessao:
         self.antes = deque(maxlen=max(1, int(ANTES_MS / QUADRO_MS)))
         self.visto = time.time()
         self.trava = threading.Lock()
+        # Transcrição adiantada, começada durante a pausa. Vale só enquanto a
+        # pausa durar: qualquer quadro de fala a invalida.
+        self.adiantada = None
 
     def zerar(self):
         self.falando = False
@@ -211,6 +290,7 @@ class Sessao:
         self.quadros_fala = 0
         self.quadros_silencio = 0
         self.antes.clear()
+        self.adiantada = None
 
 
 _sessoes: dict = {}
@@ -271,18 +351,33 @@ def resultado_do_turno(audio: bytes, extra: dict) -> dict:
 
 
 def transcrever(audio: bytes) -> str:
-    if _escuta is None or curto_demais(audio):
+    if _transcrever_local is None or curto_demais(audio):
         return ""
     dados = np.frombuffer(bytes(audio), dtype="<i2").astype("float32") / 32768.0
     with _trava_escuta:
-        # beam_size=1 de propósito: em conversa, 200 ms de demora pesam mais
-        # que o ganho de qualidade de procurar mais caminhos.
-        trechos, _ = _escuta.transcribe(
-            dados, language="pt", beam_size=1,
-            condition_on_previous_text=False,
-            vad_filter=False,   # o corte já foi feito aqui, pelo detector
-        )
-        return " ".join(t.text for t in trechos).strip()
+        return _transcrever_local(dados)
+
+
+# Um trabalhador só, de propósito: transcrever já é protegido por uma trava, e
+# dois adiantamentos ao mesmo tempo só disputariam o processador com o que o
+# Thor precisa para responder.
+_adiantadores = ThreadPoolExecutor(max_workers=1, thread_name_prefix="adianta")
+
+
+def _adiantar(audio: bytes):
+    """Começa a transcrever num thread à parte e devolve a promessa.
+
+    Devolve None de dentro se o áudio for curto demais para ser frase — assim
+    quem espera sabe que não vale e cai no caminho normal.
+    """
+    def trabalho():
+        try:
+            return transcrever(audio) if not curto_demais(audio) else None
+        except Exception as e:  # noqa: BLE001
+            print(f"[voz] adiantar falhou: {type(e).__name__}: {e}",
+                  file=sys.stderr, flush=True)
+            return None
+    return _adiantadores.submit(trabalho)
 
 
 def engolir(s: Sessao, pcm: bytes) -> dict:
@@ -301,6 +396,9 @@ def engolir(s: Sessao, pcm: bytes) -> dict:
             chance = float(_detector(torch.from_numpy(amostras), TAXA_ESCUTA).item())
 
             if chance >= LIMIAR_FALA:
+                # Voltou a falar: o que foi adiantado durante a pausa não
+                # cobre mais o turno inteiro, então não serve.
+                s.adiantada = None
                 s.quadros_silencio = 0
                 s.quadros_fala += 1
                 if not s.falando:
@@ -320,6 +418,11 @@ def engolir(s: Sessao, pcm: bytes) -> dict:
                     # O silêncio entra no áudio: cortar exatamente na última
                     # sílaba deixa a transcrição sem o final da palavra.
                     s.fala += quadro
+                    # A pausa já é longa o bastante para valer adiantar.
+                    if (ESPECULAR and s.adiantada is None
+                            and _transcrever_local is not None
+                            and s.quadros_silencio * QUADRO_MS >= ESPECULAR_MS):
+                        s.adiantada = _adiantar(bytes(s.fala))
                     if s.quadros_silencio * QUADRO_MS >= SILENCIO_MS:
                         parou = True
                         break
@@ -335,10 +438,18 @@ def engolir(s: Sessao, pcm: bytes) -> dict:
                     "ms": round((time.time() - t0) * 1000)}
 
         audio = bytes(s.fala)
+        adiantada = s.adiantada
         s.zerar()
 
     # Fora da trava da sessão: transcrever dura segundos e não pode bloquear a
     # chegada do próximo pedaço de áudio.
+    if adiantada is not None:
+        pronta = adiantada.result()
+        if pronta is not None:
+            return {"falando": False, "parou": True, "texto": pronta,
+                    "segundos": round(len(audio) / (TAXA_ESCUTA * 2), 2),
+                    "adiantou_ms": round(ESPECULAR_MS and (SILENCIO_MS - ESPECULAR_MS)),
+                    "ms": round((time.time() - t0) * 1000)}
     return resultado_do_turno(audio, {"ms": round((time.time() - t0) * 1000)})
 
 
@@ -413,6 +524,7 @@ class Alca(BaseHTTPRequestHandler):
                 "taxa_escuta": TAXA_ESCUTA,
                 "taxa_fala": _taxa_fala,
                 "silencio_ms": SILENCIO_MS,
+                "adianta_em_ms": ESPECULAR_MS if ESPECULAR else 0,
                 "sessoes": len(_sessoes),
             })
         self._json(404, {"erro": "nao encontrado"})

@@ -126,7 +126,10 @@ if [[ -x $VOZVENV/bin/python ]]; then
   # bibliotecas de CUDA que nunca vao rodar nesta maquina sem placa.
   "$VOZVENV/bin/pip" install -q torch --index-url https://download.pytorch.org/whl/cpu \
     >/dev/null 2>&1 || true
-  if "$VOZVENV/bin/pip" install -q faster-whisper silero-vad piper-tts >/dev/null 2>&1; then
+  # transformers carrega o wav2vec2, que e quem transcreve aqui dentro;
+  # faster-whisper fica disponivel para quando o processador trocar.
+  if "$VOZVENV/bin/pip" install -q transformers faster-whisper silero-vad piper-tts \
+      >/dev/null 2>&1; then
     echo "   escuta e fala prontas"
   else
     echo "   AVISO: as bibliotecas de voz nao instalaram; ele fica so no texto"

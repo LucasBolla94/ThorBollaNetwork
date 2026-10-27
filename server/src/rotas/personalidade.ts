@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { config } from '../config.ts';
 import { getSetting, setSetting } from '../db.ts';
+import { chaveDaEscuta, podeEscutarNaNuvem } from '../voz.ts';
 import {
   alma,
   almaEfetiva,
@@ -68,6 +69,10 @@ export async function rotas(app: FastifyInstance): Promise<void> {
       model: activeModel(),
       openrouter: { hasKey: hasKey('openrouter'), hint: hint(apiKey('openrouter')) },
       anthropic: { hasKey: hasKey('anthropic'), hint: hint(apiKey('anthropic')) },
+      // A escuta aparece aqui mesmo nao sendo um provedor de LLM: para quem
+      // usa a tela, as duas coisas sao "a chave de um servico de fora", e
+      // esconder isso em outro lugar so faria procurar.
+      escuta: { hasKey: podeEscutarNaNuvem(), hint: hint(chaveDaEscuta()) },
       ready: hasKey(),
     };
   });
@@ -92,6 +97,8 @@ export async function rotas(app: FastifyInstance): Promise<void> {
     for (const [campo, chave, prefixo] of [
       ['openrouterKey', 'openrouter_key', 'sk-or-'],
       ['anthropicKey', 'anthropic_key', 'sk-ant-'],
+      // Entender fala nao e a mesma chave da LLM: o OpenRouter nao faz audio.
+      ['groqKey', 'groq_key', 'gsk_'],
     ] as const) {
       const v = body[campo];
       if (typeof v === 'string' && v.trim()) {

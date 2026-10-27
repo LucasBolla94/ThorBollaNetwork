@@ -41,22 +41,61 @@ depurar com `curl`. WebSocket aqui dentro só acrescentaria uma biblioteca e um
 jeito a mais de quebrar.
 
 
+## Onde a transcrição acontece: aqui ou na nuvem
+
+Medido neste servidor, com as 300 frases que o dono gravou (a conta está em
+`ferramentas/medir-escuta.py` e `medir-escuta-fundo.py`):
+
+    modelo            velocidade        erro      por frase
+    small               0,6x real       10%         5,6 s
+    medium              0,2x real        6%        17,0 s
+    large-v3-turbo      0,1x real        6%        27,5 s
+
+**0,6x significa mais devagar do que a fala acontece.** Uma frase de quatro
+segundos custa 5,6 segundos para ser entendida. Isso não é conversa, é
+rádio amador.
+
+A causa é o processador: um Xeon de 2013, com AVX mas **sem AVX2**, que é a
+instrução de que o motor do Whisper mais depende. Testei quantizar diferente
+(int8, int16, float32) e não muda nada — float32 saiu até um pouco mais lento.
+Não é ajuste errado, é a máquina.
+
+Então existem dois modos, e o padrão é `nuvem`:
+
+    local   transcreve aqui. Honesto e privado, mas 5,6 s por frase neste
+            processador. Serve se um dia a máquina trocar, ou se o dono
+            preferir que nada saia daqui e aceitar a espera.
+    nuvem   manda o áudio do turno para o Thor transcrever fora. Rápido e
+            barato. O serviço nem carrega o modelo de escuta, o que economiza
+            2,9 GB de memória.
+
+**Sobre o que sai da máquina no modo nuvem.** Sai o áudio do que o dono falou.
+O texto dessa mesma conversa já vai para a LLM na nuvem de qualquer forma —
+então o conteúdo já saía; o que passa a sair é a gravação. O que **não** sai
+nunca é o modelo da voz dele, que é o que permitiria clonagem: falar continua
+100% aqui dentro.
+
+
 ## As rotas
 
     POST /ouvir/<sessao>      corpo = PCM 16 kHz, 16 bits, mono, cru
                               -> {"falando", "parou", "texto", "ms"}
-    POST /ouvir/<sessao>/fim  fecha o turno na força e devolve o texto
+                              no modo nuvem, "wav" (base64) em vez de "texto"
+    POST /ouvir/<sessao>/fim  fecha o turno na força
     DELETE /ouvir/<sessao>    descarta a sessão
     POST /falar               {"texto": "..."} -> PCM 22,05 kHz cru
     GET  /saude
 """
 
+import base64
+import io
 import json
 import os
 import re
 import sys
 import threading
 import time
+import wave
 from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -110,12 +149,22 @@ _detector = load_silero_vad(onnx=True)
 print(f"[voz] detector pronto em {time.time() - _t0:.1f}s "
       f"(0,4 ms por quadro de 32 ms, medido)", flush=True)
 
-print(f"[voz] carregando escuta ({MODELO_ESCUTA})...", flush=True)
-_t0 = time.time()
-from faster_whisper import WhisperModel  # noqa: E402
+# No modo nuvem o modelo nem e carregado: quem transcreve e o Thor, do outro
+# lado. Economiza 2,9 GB de memoria e os 30s de arranque.
+_escuta = None
+NA_NUVEM = MODELO_ESCUTA.lower() in ("nuvem", "remota", "remoto")
+if NA_NUVEM:
+    print("[voz] escuta NA NUVEM: aqui so detecto fala e mando o audio do turno",
+          flush=True)
+else:
+    print(f"[voz] carregando escuta ({MODELO_ESCUTA}) aqui mesmo...", flush=True)
+    _t0 = time.time()
+    from faster_whisper import WhisperModel  # noqa: E402
 
-_escuta = WhisperModel(MODELO_ESCUTA, device="cpu", compute_type="int8", cpu_threads=THREADS)
-print(f"[voz] escuta pronta em {time.time() - _t0:.1f}s", flush=True)
+    _escuta = WhisperModel(MODELO_ESCUTA, device="cpu", compute_type="int8",
+                           cpu_threads=THREADS)
+    print(f"[voz] escuta pronta em {time.time() - _t0:.1f}s "
+          f"(medido: ~5,6s por frase com `small` nesta maquina)", flush=True)
 
 _fala = None
 _ajuste_fala = None
@@ -183,8 +232,46 @@ def sessao(nome: str) -> Sessao:
 # ===========================================================================
 # Ouvir.
 # ===========================================================================
+def curto_demais(audio: bytes) -> bool:
+    """Menos de 0,2s nao e frase: e porta batendo, estalo, um "ah"."""
+    return len(audio) < TAXA_ESCUTA * 2 * 0.2
+
+
+def como_wav(pcm: bytes) -> bytes:
+    """Poe o cabecalho de WAV no PCM cru.
+
+    Quem transcreve na nuvem recebe um arquivo, nao amostras soltas. Montar o
+    cabecalho aqui — 44 bytes — evita uma dependencia inteira so para isso.
+    """
+    saco = io.BytesIO()
+    with wave.open(saco, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(TAXA_ESCUTA)
+        w.writeframes(pcm)
+    return saco.getvalue()
+
+
+def resultado_do_turno(audio: bytes, extra: dict) -> dict:
+    """O que devolver quando o turno fecha, conforme quem transcreve.
+
+    No modo nuvem vai o audio em base64. Base64 cresce o corpo em um terco —
+    213 KB em vez de 160 KB para cinco segundos de fala — e isso nao importa,
+    porque a viagem e pelo proprio computador. A alternativa seria uma segunda
+    requisicao para buscar o audio, o que obrigaria a guardar o turno fechado
+    aqui e inventar quando jogar fora.
+    """
+    base = {"falando": False, "parou": True,
+            "segundos": round(len(audio) / (TAXA_ESCUTA * 2), 2), **extra}
+    if curto_demais(audio):
+        return {**base, "texto": ""}
+    if NA_NUVEM:
+        return {**base, "wav": base64.b64encode(como_wav(audio)).decode("ascii")}
+    return {**base, "texto": transcrever(audio)}
+
+
 def transcrever(audio: bytes) -> str:
-    if len(audio) < TAXA_ESCUTA * 2 * 0.2:   # menos de 0,2s não é frase
+    if _escuta is None or curto_demais(audio):
         return ""
     dados = np.frombuffer(bytes(audio), dtype="<i2").astype("float32") / 32768.0
     with _trava_escuta:
@@ -250,12 +337,9 @@ def engolir(s: Sessao, pcm: bytes) -> dict:
         audio = bytes(s.fala)
         s.zerar()
 
-    # Transcreve FORA da trava da sessão: dura centenas de ms e não pode
-    # bloquear a chegada do próximo pedaço de áudio.
-    texto = transcrever(audio)
-    return {"falando": False, "parou": True, "texto": texto,
-            "segundos": round(len(audio) / (TAXA_ESCUTA * 2), 2),
-            "ms": round((time.time() - t0) * 1000)}
+    # Fora da trava da sessão: transcrever dura segundos e não pode bloquear a
+    # chegada do próximo pedaço de áudio.
+    return resultado_do_turno(audio, {"ms": round((time.time() - t0) * 1000)})
 
 
 def fechar(s: Sessao) -> dict:
@@ -263,8 +347,7 @@ def fechar(s: Sessao) -> dict:
     with s.trava:
         audio = bytes(s.fala)
         s.zerar()
-    return {"falando": False, "parou": True, "texto": transcrever(audio),
-            "segundos": round(len(audio) / (TAXA_ESCUTA * 2), 2)}
+    return resultado_do_turno(audio, {})
 
 
 # ===========================================================================
@@ -325,6 +408,7 @@ class Alca(BaseHTTPRequestHandler):
             return self._json(200, {
                 "ok": True,
                 "escuta": MODELO_ESCUTA,
+                "na_nuvem": NA_NUVEM,
                 "fala": bool(_fala),
                 "taxa_escuta": TAXA_ESCUTA,
                 "taxa_fala": _taxa_fala,

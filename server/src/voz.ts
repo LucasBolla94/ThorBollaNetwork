@@ -1,3 +1,5 @@
+import { config } from './config.ts';
+import { getSetting } from './db.ts';
 import { MARCAS } from './memory.ts';
 
 // ===========================================================================
@@ -15,10 +17,15 @@ import { MARCAS } from './memory.ts';
 const ENDERECO = process.env.THOR_VOZ_URL ?? 'http://127.0.0.1:8798';
 const TEMPO_ESCUTA = 6000;
 const TEMPO_FALA = 15000;
+// Transcrever fora e rapido (uns 300 ms), mas passa pela internet. Oito
+// segundos e paciencia de sobra; alem disso, a conversa ja morreu e insistir
+// so faz a pessoa esperar por nada.
+const TEMPO_NUVEM = 8000;
 
 let vivoAte = 0;
 let vivo = false;
 let temFala = false;
+let naNuvem = false;
 let taxaFala = 22050;
 
 export type EstadoEscuta = {
@@ -26,7 +33,64 @@ export type EstadoEscuta = {
   parou: boolean;
   texto: string;
   segundos?: number;
+  /** No modo nuvem vem o audio do turno, em base64, em vez do texto. */
+  wav?: string;
 };
+
+// ------------------------------------------------------- transcrever fora
+
+/**
+ * Entender fala fora da maquina.
+ *
+ * **Por que existe.** Medido neste servidor com as 300 frases que o Lucas
+ * gravou: o modelo `small` leva 5,6 segundos para entender uma frase de
+ * quatro. O gargalo e o processador — um Xeon de 2013 sem AVX2, a instrucao
+ * de que o motor do Whisper mais depende. Quantizar diferente nao muda (int8,
+ * int16 e float32 ficaram todos no mesmo lugar). Modelo menor fica rapido e
+ * passa a errar uma palavra em cinco. A conta esta em
+ * `ferramentas/medir-escuta-fundo.py`.
+ *
+ * **O que sai da maquina.** O audio do que ele falou. O texto dessa mesma
+ * conversa ja vai para a LLM na nuvem de qualquer forma, entao o conteudo ja
+ * saia — o que passa a sair e a gravacao. O que nunca sai e o modelo da voz
+ * dele, que e o que permitiria clonagem: falar continua inteiramente aqui.
+ */
+const GROQ_URL = 'https://api.groq.com/openai/v1/audio/transcriptions';
+const MODELO_NUVEM = process.env.THOR_VOZ_MODELO_NUVEM ?? 'whisper-large-v3-turbo';
+
+export const chaveDaEscuta = (): string =>
+  getSetting('groq_key') || config.groqKey;
+
+export const podeEscutarNaNuvem = (): boolean => chaveDaEscuta().length > 0;
+
+export async function transcreverNaNuvem(wav: Buffer): Promise<string | null> {
+  const chave = chaveDaEscuta();
+  if (!chave) return null;
+  try {
+    const corpo = new FormData();
+    corpo.append('file', new Blob([new Uint8Array(wav)], { type: 'audio/wav' }), 'turno.wav');
+    corpo.append('model', MODELO_NUVEM);
+    // Dizer que e portugues importa: sem isto ele adivinha pelo audio e as
+    // vezes decide que uma frase curta e espanhol, que e o erro mais comum
+    // em frases de duas palavras.
+    corpo.append('language', 'pt');
+    corpo.append('response_format', 'json');
+    // Temperatura zero: numa conversa, inventar e pior que recusar.
+    corpo.append('temperature', '0');
+
+    const r = await fetch(GROQ_URL, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${chave}` },
+      body: corpo,
+      signal: AbortSignal.timeout(TEMPO_NUVEM),
+    });
+    if (!r.ok) return null;
+    const d = (await r.json()) as { text?: string };
+    return (d.text ?? '').trim();
+  } catch {
+    return null;
+  }
+}
 
 /** Diz se o servico respondeu. A resposta vale 30s, para nao perguntar sempre. */
 export async function vozDisponivel(): Promise<boolean> {
@@ -35,8 +99,13 @@ export async function vozDisponivel(): Promise<boolean> {
     const r = await fetch(`${ENDERECO}/saude`, { signal: AbortSignal.timeout(2000) });
     vivo = r.ok;
     if (r.ok) {
-      const s = (await r.json()) as { fala?: boolean; taxa_fala?: number };
+      const s = (await r.json()) as {
+        fala?: boolean;
+        taxa_fala?: number;
+        na_nuvem?: boolean;
+      };
       temFala = s.fala === true;
+      naNuvem = s.na_nuvem === true;
       taxaFala = Number(s.taxa_fala) || 22050;
     }
   } catch {
@@ -49,6 +118,19 @@ export async function vozDisponivel(): Promise<boolean> {
 /** Ele sabe falar, ou so ouvir? Falso ate a primeira conferencia de saude. */
 export const sabeFalar = (): boolean => temFala;
 export const taxaDaFala = (): number => taxaFala;
+
+/**
+ * Ele consegue ouvir de verdade?
+ *
+ * Duas pecas tem de combinar: o servico de voz esta no ar, e quem transcreve
+ * esta alcancavel. No modo nuvem isso exige uma chave — sem ela, o microfone
+ * captaria audio que nunca viraria texto, e o botao ficaria la prometendo uma
+ * conversa que nao acontece. Melhor nao mostrar o botao.
+ */
+export const sabeOuvir = (): boolean => vivo && (!naNuvem || podeEscutarNaNuvem());
+
+/** Onde a fala e entendida: aqui ou fora. So para dizer a verdade na tela. */
+export const escutaNaNuvem = (): boolean => naNuvem;
 
 // ------------------------------------------------------------------ ouvir
 

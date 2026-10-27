@@ -89,6 +89,9 @@ export const config = {
   sessionDays: Number(process.env.SESSION_DAYS ?? 30),
 
   openrouterKey: process.env.OPENROUTER_API_KEY ?? '',
+  // Transcricao da fala. Fica separada da chave da LLM porque o OpenRouter
+  // nao faz audio — entender fala exige outro servico, com outra chave.
+  groqKey: process.env.GROQ_API_KEY ?? '',
   model: process.env.LUK_MODEL ?? 'anthropic/claude-sonnet-5.5',
   siteName: env('SITE_NAME') ?? 'Thor',
   publicUrl: process.env.LUK_PUBLIC_URL ?? 'https://bolla.network',

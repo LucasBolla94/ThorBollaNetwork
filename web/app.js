@@ -545,6 +545,16 @@ function connect() {
           state.vozPode = m.disponivel;
           state.vozFala = m.fala === true;
           mostrarBotaoDaVoz();
+          // Servico no ar mas sem a chave de quem entende a fala: dizer isso
+          // e melhor que esconder o botao em silencio, senao o recurso parece
+          // nao existir e ele nunca descobre que falta um passo so.
+          if (m.faltaChave) {
+            const d = $('#voz-hint');
+            if (d) {
+              d.textContent = 'Para ele te ouvir, falta uma chave em Configuracao.';
+              d.hidden = false;
+            }
+          }
           // Reconectou e ele ainda queria conversar falando: volta sozinho.
           if (state.queriaVoz && !state.vozLigada) void ligarVoz();
         }
@@ -862,6 +872,14 @@ async function loadConfig() {
 
   $('#cfg-model').value = c.model;
   $('#cfg-model-for').textContent = `(${c.provider})`;
+
+  const estadoEscuta = $('#cfg-escuta-state');
+  if (estadoEscuta) {
+    estadoEscuta.textContent = c.escuta?.hasKey
+      ? `chave guardada (${c.escuta.hint}) — ele te ouve`
+      : 'sem chave: o microfone fica escondido ate voce colar uma';
+  }
+
   loadModels();
 }
 
@@ -887,9 +905,11 @@ async function saveConfig() {
   const body = { provider: cfgProvider };
   const or = $('#cfg-key-openrouter').value.trim();
   const an = $('#cfg-key-anthropic').value.trim();
+  const gq = $('#cfg-key-groq')?.value.trim();
   const model = $('#cfg-model').value.trim();
   if (or) body.openrouterKey = or;
   if (an) body.anthropicKey = an;
+  if (gq) body.groqKey = gq;
   if (model) body.model = model;
 
   try {

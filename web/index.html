@@ -276,6 +276,23 @@
           <datalist id="model-list"></datalist>
           <p class="muted sm" id="cfg-model-state"></p>
 
+          <label style="margin-top:22px">Chave para ele te ouvir (Groq)
+            <input id="cfg-key-groq" type="password" placeholder="gsk_..."
+                   autocomplete="off" spellcheck="false" />
+          </label>
+          <p class="muted sm" id="cfg-escuta-state"></p>
+          <p class="muted sm">
+            Entender fala e outro servico: o OpenRouter nao faz audio. Medido neste
+            servidor, entender uma frase aqui dentro leva 5,6 segundos — o processador
+            e de 2013 e nao tem a instrucao que o modelo usa. Com esta chave leva menos
+            de meio segundo, e custa US$ 0,04 por hora de fala.
+          </p>
+          <p class="muted sm">
+            Sai desta maquina a gravacao do que voce falou. O texto da conversa ja vai
+            para a IA na nuvem de qualquer forma. A sua voz — o modelo que permitiria
+            clonar voce — nunca sai: falar continua 100% aqui.
+          </p>
+
           <p class="muted sm" style="margin-top:18px">
             As chaves ficam no banco do servidor e nunca voltam inteiras para o navegador.
             Cada provedor guarda a sua chave e o seu modelo — trocar de um para o outro

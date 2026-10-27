@@ -32,15 +32,19 @@ import {
 } from './entrevista.ts';
 import {
   descartarEscuta,
+  escutaNaNuvem,
   falar,
   fecharEscuta,
   limiteSeguro,
   ouvir,
   pedacoFalavel,
+  podeEscutarNaNuvem,
   quadroDeAudio,
   sabeFalar,
+  sabeOuvir,
   semMarcas,
   taxaDaFala,
+  transcreverNaNuvem,
   vozDisponivel,
 } from '../voz.ts';
 
@@ -110,10 +114,13 @@ export async function canal(app: FastifyInstance): Promise<void> {
             descartarEscuta(sessaoVoz);
             return send({ t: 'voz', ligado: false });
           }
-          if (!(await vozDisponivel())) {
+          await vozDisponivel();
+          if (!sabeOuvir()) {
             return send({
               t: 'error',
-              message: 'O servico de voz nao esta respondendo. Por texto continua funcionando.',
+              message: escutaNaNuvem() && !podeEscutarNaNuvem()
+                ? 'Falta a chave de quem entende a fala. Cole em Configuracao, no menu ao lado.'
+                : 'O servico de voz nao esta respondendo. Por texto continua funcionando.',
             });
           }
           vozLigada = true;
@@ -438,7 +445,21 @@ export async function canal(app: FastifyInstance): Promise<void> {
         if (!estado.parou) return;
 
         estavaFalando = false;
-        const dito = (estado.texto ?? '').trim();
+        // No modo nuvem o servico devolve o audio do turno, nao o texto: a
+        // chave de quem transcreve vive aqui, junto das outras, e nao num
+        // arquivo de ambiente de servico.
+        let dito = (estado.texto ?? '').trim();
+        if (!dito && estado.wav) {
+          send({ t: 'ouvindo', falando: false, entendendo: true });
+          dito = (await transcreverNaNuvem(Buffer.from(estado.wav, 'base64'))) ?? '';
+          if (!dito) {
+            send({
+              t: 'error',
+              message: 'Nao consegui entender o que voce falou. Tente de novo, ou escreva.',
+            });
+            return send({ t: 'ouvindo', falando: false });
+          }
+        }
         if (!dito) return send({ t: 'ouvindo', falando: false });
         send({ t: 'ouvi', texto: dito, segundos: estado.segundos });
         await tratar({ t: 'chat', text: dito, conversationId: conversaAtual });
@@ -479,8 +500,17 @@ export async function canal(app: FastifyInstance): Promise<void> {
       // Saber se a voz esta no ar e uma ida na rede, e o `ready` e o que
       // destrava a tela — nao pode esperar por isto. Vai logo depois, e o
       // botao do microfone so aparece quando a resposta chega.
-      void vozDisponivel().then((ok) => {
-        if (socket.readyState === 1) send({ t: 'voz', disponivel: ok, fala: sabeFalar() });
+      void vozDisponivel().then(() => {
+        if (socket.readyState !== 1) return;
+        send({
+          t: 'voz',
+          disponivel: sabeOuvir(),
+          fala: sabeFalar(),
+          // Quando o servico esta no ar mas falta a chave, a tela precisa
+          // dizer isso em vez de so esconder o botao: senao o recurso parece
+          // nao existir, e ele nunca descobre que falta um passo so.
+          faltaChave: escutaNaNuvem() && !podeEscutarNaNuvem(),
+        });
       });
     });
   });

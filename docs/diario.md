@@ -1183,3 +1183,34 @@ extrair. **Mais épocas não melhoram daqui — mais gravação, sim.** 18,8 min
   linha de comando, onde apareceria em `ps` e no histórico.
 - **Encerrar o pod apaga o volume.** O que não descer antes, se perde. O
   `treinar-no-pod.sh` termina imprimindo o que precisa ser baixado.
+
+### Como terminou
+
+Época 7.158, `val_mos` final **3,57** — acima do platô de 3,3–3,5 onde ele
+passou a maior parte do treino. Custo fechado: **US$ 0,94**, 3,48 horas de
+placa. O pod foi encerrado e nada ficou cobrando.
+
+O que desceu para o servidor antes de encerrar:
+
+| arquivo | tamanho | para quê |
+|---|---|---|
+| `voz.onnx` | 61 MB | a voz, pronta para usar |
+| `voz.onnx.json` | 5 KB | a configuração que o Piper lê |
+| `ultimo.ckpt` | 807 MB | treinar mais depois sem recomeçar |
+| `fim-do-treino.log` | 7 KB | as últimas 40 linhas, para conferência |
+
+**"Baixou" não é o mesmo que "funciona".** Um ONNX pode carregar e devolver
+silêncio, ou devolver o tom errado, e os dois parecem sucesso para quem só
+olha o tamanho do arquivo. Então `voz/testar-voz.py` sintetiza cinco frases
+acentuadas e mede o que denuncia cada falha: duração (silêncio sai 0,0s),
+nível (ONNX quebrado devolve quase-zero), recorte (distorção audível) e taxa
+de amostragem (tom errado). As cinco passaram.
+
+**O número que decide a arquitetura: 10× tempo real na CPU.** Um segundo de
+processador dá dez segundos de fala, sem GPU nenhuma. Quer dizer que a voz do
+Thor roda no servidor que já existe, de graça, respondendo na hora — não
+precisa de placa alugada para falar, só para treinar.
+
+As frases de teste são acentuadas de propósito: texto sem acento muda a sílaba
+tônica e some com a nasalização. Foi o que estragou a primeira rodada de
+testes da voz clonada, e a lição vale igual aqui.

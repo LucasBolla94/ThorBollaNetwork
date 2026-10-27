@@ -1344,3 +1344,103 @@ uma que começa com "Não".
 | voz (corte e marcas) | 34 |
 | serviço de voz, com áudio real | 15 |
 | conversa ao vivo | 6 |
+
+---
+
+## Ouvir no servidor: eu tinha dito que não dava, e estava errado
+
+O dono perguntou se não dá para rodar um modelo bom aqui. Minha resposta
+anterior era "não dá nesta máquina" — e estava **incompleta**: eu havia medido
+só o Whisper e generalizado a partir de uma família de modelos.
+
+Medido com as 300 frases dele:
+
+| modelo | velocidade | erro | por frase |
+|---|---|---|---|
+| whisper small | 0,6× tempo real | 10,1% | 5,64 s |
+| vosk pequeno | 2,1× | 22,1% | 1,78 s |
+| vosk grande | **19,1×** | 18,6% | 0,20 s |
+| **wav2vec2 bp400** | 2,3× | **8,0%** | 1,65 s |
+
+**O wav2vec2 ganha do Whisper nas duas pontas** — um terço do tempo e
+acertando mais. O motivo é o formato, não o tamanho: o Whisper sempre processa
+uma janela de 30 segundos e escreve palavra por palavra, cada uma esperando a
+anterior. O wav2vec2 olha o áudio inteiro de uma vez e escreve tudo de uma
+vez, com custo proporcional à duração real.
+
+O Vosk grande voa, mas erra quase uma palavra em cinco — numa conversa isso
+faz o agente responder a outra pergunta, pior que demorar.
+
+Quantizar para 8 bits foi tentado e **abandonado**: nesta máquina a conversão
+em si nunca terminou em tempo razoável. Sem AVX2 não existem os núcleos
+rápidos de 8 bits que justificariam a troca.
+
+### Tempo achado de graça
+
+Os 520 ms de silêncio que confirmam o fim do turno eram **processador parado**.
+Agora, passados 200 ms de pausa, a transcrição começa num thread à parte com o
+áudio que já existe. Se ele voltar a falar, joga-se fora — qualquer quadro de
+fala invalida o adiantamento. O silêncio que entra depois não muda a
+transcrição, porque é silêncio.
+
+Poupa ~0,5 s medidos.
+
+### O número honesto
+
+| | |
+|---|---|
+| entender o que ele falou | 1,66 s |
+| a LLM começar a responder | 0,70 s |
+| o primeiro pedaço de voz sair | 0,17 s |
+| **do ponto final dele ao primeiro som** | **2,53 s** |
+
+Tudo dentro do servidor. A nuvem tira uns 0,7 s disso, em troca de uma chave e
+do áudio saindo da máquina — virou preferência, não limitação.
+
+### Um defeito real, achado por acaso
+
+O detector de fala **não é uma função**: é uma rede recorrente que guarda
+estado entre chamadas, e é assim que distingue pausa no meio da frase de fim
+de fala. Havia um detector único para todas as conversas — então o estado de
+uma entrava na outra. O dono pode ter o site aberto no celular e no computador
+ao mesmo tempo: o microfone de um corromperia a detecção do outro, de forma
+intermitente e **sem erro em lugar nenhum**. Agora cada conversa tem o seu, e
+o estado é zerado a cada turno.
+
+### Dois diagnósticos errados meus, pelo valor de não repetir
+
+A medição da espera acusava "o turno não fechou" numa frase, de forma
+perfeitamente reproduzível. Três vezes, sempre a mesma frase.
+
+**Primeiro culpei o estado do detector.** Plausível, e levou ao conserto acima
+— mas não era a causa: o teste que escrevi para provar o vazamento passava
+igual antes do conserto.
+
+**Depois culpei o estouro do inteiro de 16 bits.** Aquela gravação tem pico
+1,008, e 1,008 × 32767 estoura e vira um negativo enorme. A trava é correta e
+ficou; não era a causa.
+
+**A causa real:** aquela gravação tem ~700 ms de silêncio no fim do
+**arquivo**, mais que os 520 ms que fecham o turno. O turno fechava enquanto a
+fala ainda estava sendo enviada, e o laço de silêncio seguinte esperava para
+sempre por um segundo fechamento que nunca viria. **O serviço estava certo o
+tempo todo** e transcrevia a frase inteira corretamente — quem mentia era a
+ferramenta de medição.
+
+A lição que fica escrita no código: uma medição só faz sentido se existir um
+instante definido do que ela mede. "Ele acabou de falar" não existe se o áudio
+enviado tiver silêncio dentro.
+
+E uma consequência desagradável: o conserto piorou o número. Era 1,14 s,
+passou a 1,66 s. O 1,14 s vinha do silêncio sobrando nos arquivos, que dava ao
+adiantamento uma vantagem que a fala real não dá. **Número bonito que vem de
+medição errada é pior que número feio.**
+
+### Medido
+
+| suite | conferências |
+|---|---|
+| voz (corte e marcas) | 34 |
+| serviço de voz, com áudio real | 18 |
+| conversa ao vivo | 6 |
+| espera de ponta a ponta | 6 frases |
